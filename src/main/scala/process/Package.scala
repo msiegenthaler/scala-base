@@ -5,6 +5,9 @@ import ch.inventsoft.scalabase.executionqueue._
 import ExecutionQueues._
 
 
+/**
+ * Lightweight processes (aka actors). See Process for detailed documentation.
+ */
 package object process {
   import ch.inventsoft.scalabase.process._
   import ch.inventsoft.scalabase.process.cps._
