@@ -1,0 +1,17 @@
+(
+	:server-root "/Users/ms/scala/emacs/ensime/"
+	:server-cmd  "bin/server.sh"
+	:server-host "localhost"
+	:server-env ()
+
+	:project-package "ch.inventsoft.scalabase"
+	:source ("src/main/scala")
+	:exclude-source ()
+	:classpath ("lib/jsr166y.jar"
+		    "lib_managed/scala_2.8.0-SNAPSHOT/compile/logback-classic-0.9.20.jar"
+		    "lib_managed/scala_2.8.0-SNAPSHOT/compile/logback-core-0.9.20.jar"
+		    "lib_managed/scala_2.8.0-SNAPSHOT/compile/slf4j-api-1.5.11.jar"
+		    "lib_managed/scala_2.8.0-SNAPSHOT/plugin/continuations-2.8.0-SNAPSHOT.jar"
+		    "project/boot/scala-2.8.0-SNAPSHOT/lib/scala-compiler.jar"
+		    "project/boot/scala-2.8.0-SNAPSHOT/lib/scala-library.jar")		    
+)
