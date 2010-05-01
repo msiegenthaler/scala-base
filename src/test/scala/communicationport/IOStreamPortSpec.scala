@@ -10,7 +10,7 @@ import ch.inventsoft.scalabase.time._
 
 class IOStreamPortSpec extends ProcessSpec with ShouldMatchers {
 
-  private class TestPortContainer private() {
+  private class TestPortContainer {
     val deviceInput = new PipedInputStream
     val deviceOutput = new PipedOutputStream
     val portInput = new PipedInputStream(deviceOutput)

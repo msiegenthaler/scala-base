@@ -1,5 +1,6 @@
 package ch.inventsoft.scalabase.communicationport
 
+import ch.inventsoft.scalabase.executionqueue.ExecutionQueues._
 import ch.inventsoft.scalabase.process._
 import ch.inventsoft.scalabase.oip._
 import ch.inventsoft.scalabase.log._
@@ -24,7 +25,7 @@ trait IOStreamPort[Res] extends CommunicationPort with StateServer[IOStreamPortS
   
   override protected[this] def initialState = {
     val (input, output, additional) = openStreams
-    val reader = spawnChild(Required) {
+    val reader = spawnChildProcess(executeForBlocking)(Required) {
       val read = createPortReader
       read(input)
     }
@@ -32,7 +33,7 @@ trait IOStreamPort[Res] extends CommunicationPort with StateServer[IOStreamPortS
     IOStreamPortState(reader, writer, None, Nil, additional)
   }
   protected[this] def createPortReader = new IOStreamPortReader(process, maxPacketSize, readDelay)
-  protected[this] def createPortWriter(output: OutputStream) = IOStreamPortWriter(output)(SpawnAsRequiredChild)
+  protected[this] def createPortWriter(output: OutputStream) = IOStreamPortWriter(output)(Spawn.asChild(Required)(executeForBlocking))
   protected[this] def openStreams: (InputStream, OutputStream, Res)
   override protected[this] def messageHandler(state: State) = {
     case ReadPacket(state.reader, data) => state.redirectTo match {
