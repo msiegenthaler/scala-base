@@ -5,6 +5,7 @@ import matchers._
 import ch.inventsoft.scalabase.process._
 import scala.concurrent.SyncVar
 import ch.inventsoft.scalabase.time._
+import cps.CpsUtils._
 
 
 class DependencySupervisorSpec extends ProcessSpec with ShouldMatchers {
@@ -83,7 +84,7 @@ class DependencySupervisorSpec extends ProcessSpec with ShouldMatchers {
       case DependenciesStarted(serial, lowLevel, series1) =>
         (supervisor, serial, lowLevel, series1)
       case Timeout =>
-        fail("not started")
+        fail("not started within Timeout")
     }
   }
   
@@ -123,10 +124,6 @@ class DependencySupervisorSpec extends ProcessSpec with ShouldMatchers {
         assertEquals(receiveWithin(1 s) { serial_1.addAndGet.option }, Some(0))
         assertEquals(receiveWithin(1 s) { serial_1.addAndGet.option }, Some(1))
         
-        receiveWithin(500 ms) { 
-          case Timeout => //ok
-          case a => fail
-        }
         serial_1.kill
 
         val (serial_2, lowlevel_2, series1_2) = receiveWithin(10 s) {
@@ -152,10 +149,6 @@ class DependencySupervisorSpec extends ProcessSpec with ShouldMatchers {
         assertEquals(receiveWithin(1 s) { serial_1.addAndGet.option }, Some(0))
         assertEquals(receiveWithin(1 s) { serial_1.addAndGet.option }, Some(1))
         
-        receiveWithin(500 ms) { 
-          case Timeout => //ok
-          case a => fail
-        }
         lowlevel_1.kill
 
         val (serial_2, lowlevel_2, series1_2) = receiveWithin(10 s) {
@@ -181,10 +174,6 @@ class DependencySupervisorSpec extends ProcessSpec with ShouldMatchers {
         assertEquals(receiveWithin(1 s) { serial_1.addAndGet.option }, Some(0))
         assertEquals(receiveWithin(1 s) { serial_1.addAndGet.option }, Some(1))
         
-        receiveWithin(500 ms) { 
-          case Timeout => //ok
-          case a => fail
-        }
         series1_1.kill
 
         val (serial_2, lowlevel_2, series1_2) = receiveWithin(10 s) {

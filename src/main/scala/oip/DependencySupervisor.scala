@@ -67,20 +67,35 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
    * - continue to run phase                          [sp]
    */
   protected[this] def body = {
+    log.trace("Entering initialize phase")
     val initResult = phaseInitialize
     initResult match {
       case InitializeSuccessful(definitions) =>
+	log.trace("Entering start phase")
         phaseStart(definitions, Nil) match {
-          case StartTerminated(children) => phaseStop(children.reverse)
+          case StartTerminated(children) =>
+	    log.trace("Entering stop phase")
+	    phaseStop(children.reverse)
           case StartFailed(failed, children, notStarted) =>
+	    log.trace("Start failed, entering restart phase")
             val restartResult = phaseRestart(failed.definition, children, notStarted)
             restartResult match {
-              case Some(children) => phaseRun(children)
-              case None => noop // Termination requested
+              case Some(children) =>
+		log.trace("Entering run phase")
+		phaseRun(children)
+              case None =>
+		// Termination requested
+		log.trace("Terminating...")
+		noop
             }
-          case StartSuccessful(children) => phaseRun(children)
+          case StartSuccessful(children) =>
+	    log.trace("Entering run phase")
+	    phaseRun(children)
         }
-      case InitializeTerminated => noop //termination requested 
+      case InitializeTerminated => 
+	//termination requested 
+	log.trace("Terminating...")
+	noop
     }
   }
 
@@ -187,6 +202,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
           case Some(crashed) =>
             //the child was one of ours, initiate a restart
             log.info("Supervised child {} crashed and requests restart", crashed.definition)
+	    log.trace("Entering restart phase")
             val restartResult = phaseRestart(crashed.definition, children, Nil) 
             restartResult match {
               case Some(newChildren) =>
@@ -202,7 +218,9 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
       case Terminate => StopRun(children)
         
     } match {
-      case StopRun(children) => phaseStop(children.reverse)
+      case StopRun(children) =>
+	log.trace("Entering stop phase")
+	phaseStop(children.reverse)
       case ContinueRun(children) => phaseRun(children)
     }
   }
@@ -243,6 +261,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
       case StartFailed(crashed, started, notStarted) =>
         phaseRestart(crashed.definition, started, notStarted)
       case StartTerminated(toStop) =>
+	log.trace("Entering stop phase")
         phaseStop(toStop.reverse)
         None
     }
