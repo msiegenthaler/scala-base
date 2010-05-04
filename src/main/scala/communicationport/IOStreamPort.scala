@@ -154,10 +154,8 @@ class IOStreamPortWriter protected(_output: OutputStream) extends StateServer[Ou
     ((), None)
   }
 }
-object IOStreamPortWriter {
-  def apply(output: OutputStream)(as: SpawnStrategy) = {
-    val o = new IOStreamPortWriter(output)
-    o.start(as)
-    o
+object IOStreamPortWriter extends SpawnableCompanion[IOStreamPortWriter] {
+  def apply(output: OutputStream)(as: SpawnStrategy) = start(as) {
+    new IOStreamPortWriter(output)
   }
 }

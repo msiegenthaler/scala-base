@@ -12,7 +12,9 @@ import scala.concurrent._
 class StateServerTest extends ProcessSpec with ShouldMatchers {
   object PeopleStateServer extends SpawnableCompanion[PeopleStateServer] {
     def apply(): PeopleStateServer @processCps = apply(SpawnAsRequiredChild)
-    def apply(as: SpawnStrategy): PeopleStateServer @processCps = start(new PeopleStateServer, as)
+    def apply(as: SpawnStrategy): PeopleStateServer @processCps = start(as) {
+      new PeopleStateServer
+    }	  
   }
   class PeopleStateServer protected() extends StateServer[PeopleState] {
     protected[this] override def initialState = PeopleState(0, Nil)
@@ -64,7 +66,9 @@ class StateServerTest extends ProcessSpec with ShouldMatchers {
   
   object ParentServer extends SpawnableCompanion[ParentServer] {
     def apply(): ParentServer @processCps = apply(SpawnAsRequiredChild)
-    def apply(as: SpawnStrategy): ParentServer @processCps = start(new ParentServer, as)
+    def apply(as: SpawnStrategy): ParentServer @processCps = start(as) {
+      new ParentServer
+    }
   }
   class ParentServer protected() extends StateServer[List[Process]] {
     protected[this] override def initialState = Nil
@@ -224,7 +228,9 @@ class StateServerTest extends ProcessSpec with ShouldMatchers {
       }
     }
     object SendTerminatePeopleStateServer extends SpawnableCompanion[SendTerminatePeopleStateServer] {
-      def apply(parent: Process, as: SpawnStrategy) = start(new SendTerminatePeopleStateServer(parent), as)
+      def apply(parent: Process, as: SpawnStrategy) = start(as) {
+	new SendTerminatePeopleStateServer(parent)
+      }
     }
   
     it_("should have a way to react to normal termination") {

@@ -19,7 +19,7 @@ trait Spawnable {
   protected[this] def body: Unit @processCps
 }
 trait SpawnableCompanion[+A <: Spawnable] {
-  protected[this] def start(what: A, as: SpawnStrategy) = {
+  protected[this] def start(as: SpawnStrategy)(what: A) = {
     what.start(as)
     what
   }
