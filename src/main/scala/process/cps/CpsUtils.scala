@@ -65,6 +65,30 @@ object CpsUtils {
   }
 
   
+  implicit def cpsOption[A](option: Option[A]): CpsOption[A] = option match {
+    case Some(value) => new CpsSome(value)
+    case None => CpsNone
+  }
+  trait CpsOption[+A] {
+    def flatMap_cps[B,X](fun: A => Option[B] @cps[X]): Option[B] @cps[X]
+    def map_cps[B,X](fun: A => B @cps[X]): Option[B] @cps[X]
+    def foreach_cps[U,X](fun: A => U @cps[X]): Unit @cps[X]
+  }
+  class CpsSome[+A](value: A) extends CpsOption[A] {
+    override def flatMap_cps[B,X](fun: A => Option[B] @cps[X]) = fun(value)
+    override def map_cps[B,X](fun: A => B @cps[X]) = Some(fun(value))
+    override def foreach_cps[U,X](fun: A => U @cps[X]) = {
+      fun(value)
+      ()
+    }
+  }
+  object CpsNone extends CpsOption[Nothing] {
+    override def flatMap_cps[B,X](fun: Nothing => Option[B] @cps[X]) = None
+    override def map_cps[B,X](fun: Nothing => B @cps[X]) = None
+    override def foreach_cps[U,X](fun: Nothing => U @cps[X]) = ()
+  }
+
+  
   implicit def cpsPartialFunction[A,B,X](fun: PartialFunction[A,B @cps[X]]) = {
     new CpsPartialFunction(fun)
   }

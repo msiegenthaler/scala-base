@@ -3,11 +3,65 @@ package ch.inventsoft.scalabase.process.cps
 import org.scalatest._
 import matchers._
 import ch.inventsoft.scalabase.process._
+import ch.inventsoft.scalabase.time._
 import CpsUtils._
 
-class CpsUtilsTest extends ProcessSpec with ShouldMatchers {
+class CpsUtilsSpec extends ProcessSpec with ShouldMatchers {
   
   describe("CPS Utilities") {
+    describe("Option") {
+      describe("flatMap") {
+	it_("should cps Some flatMap Some == Some") {
+	  self ! "Hi"
+	  val r = Some("Mario").flatMap_cps { v => receive {
+	    case a: String => Some(a + " " + v)
+	  }}
+	  r should be(Some("Hi Mario"))
+	}
+	it_("should cps Some flatMap None == None") {
+	  self ! "Hi"
+	  val r = Some("Mario").flatMap_cps { v => receive {
+	    case "Hi" => None
+	  }}
+	  r should be(None)
+	}
+	it_("should cps None == None") {
+	  val r = None.flatMap_cps { v => receive {
+	    case a: String => Some(a + " " + v)
+	  }}
+	  r should be(None)
+	}
+      }
+      describe("map") {
+	it_("should cps map Some") {
+	  self ! "Hi"
+	  val r = Some("Mario").map_cps { v => receive {
+	    case a: String => a + " " + v
+	  }}
+	  r should be(Some("Hi Mario"))
+	}
+	it_("should cps None == None") {
+	  val r = None.map_cps { v => receive {
+	    case a: String => a + " " + v
+	  }}
+	  r should be(None)
+	}
+      } 
+      describe("foreach") {
+	it_("should execute once on Some") {
+	  self ! "Mario"
+	  Some("Hi").foreach_cps( v => receive { case a: String => self ! (v + " " + a) } )
+	  val x = receiveWithin(1 s) { case a: String => a }
+	  x should be("Hi Mario")
+	}
+	it_("should execute never on None") {
+	  self ! "Mario"
+	  None.foreach_cps( v => receive { case a: String => self ! ("Hi " + a) } )
+	  val x = receiveWithin(1 s) { case a: String => a }
+	  x should be("Mario")
+	}
+      }
+    }
     describe("Traversable") {
       describe("foreach") {
         it_("should support cps-fun") {
