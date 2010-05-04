@@ -34,7 +34,7 @@ trait IOStreamPort[Res] extends CommunicationPort with StateServer[IOStreamPortS
   }
   protected[this] def createPortReader = new IOStreamPortReader(process, maxPacketSize, readDelay)
   protected[this] def createPortWriter(output: OutputStream) = IOStreamPortWriter(output)(Spawn.asChild(Required)(executeForBlocking))
-  protected[this] def openStreams: (InputStream, OutputStream, Res)
+  protected[this] def openStreams: (InputStream, OutputStream, Res) @processCps
   override protected[this] def messageHandler(state: State) = {
     case ReadPacket(state.reader, data) => state.redirectTo match {
       case Some(process) =>
