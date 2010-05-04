@@ -9,7 +9,7 @@ import ch.inventsoft.scalabase.process._
  * Class that is spawned as its own process. 
  */
 trait Spawnable {
-  protected def start(as: SpawnStrategy) = {
+  protected[oip] def start(as: SpawnStrategy) = {
     val p = as.spawn(body)
     _process.set(p)
   }
@@ -18,12 +18,20 @@ trait Spawnable {
 
   protected[this] def body: Unit @processCps
 }
+trait SpawnableCompanion[+A <: Spawnable] {
+  protected[this] def start(what: A, as: SpawnStrategy) = {
+    what.start(as)
+    what
+  }
+}
+
 
 /**
  * Implements the spawning of a Spawnable. 
  */
-trait SpawnStrategy {
+trait SpawnStrategy extends {
   def spawn[A](body: => A @processCps): Process @processCps
+  final def apply[A](body: => A @processCps): Process @processCps = spawn(body)
 }
 object SpawnAsOwnProcess extends SpawnStrategy {
   override def spawn[A](body: => A @processCps) = {

@@ -10,13 +10,9 @@ import Messages._
 import scala.concurrent._
 
 class StateServerTest extends ProcessSpec with ShouldMatchers {
-  object PeopleStateServer {
+  object PeopleStateServer extends SpawnableCompanion[PeopleStateServer] {
     def apply(): PeopleStateServer @processCps = apply(SpawnAsRequiredChild)
-    def apply(as: SpawnStrategy): PeopleStateServer @processCps = {
-      val server = new PeopleStateServer
-      server.start(as)
-      server
-    }
+    def apply(as: SpawnStrategy): PeopleStateServer @processCps = start(new PeopleStateServer, as)
   }
   class PeopleStateServer protected() extends StateServer[PeopleState] {
     protected[this] override def initialState = PeopleState(0, Nil)
@@ -66,15 +62,11 @@ class StateServerTest extends ProcessSpec with ShouldMatchers {
   }
   case class PeopleState(counter: Int, people: List[String])
   
-  object ParentServer {
+  object ParentServer extends SpawnableCompanion[ParentServer] {
     def apply(): ParentServer @processCps = apply(SpawnAsRequiredChild)
-    def apply(as: SpawnStrategy): ParentServer @processCps = {
-      val server = new ParentServer
-      server.start(as)
-      server
-    }
+    def apply(as: SpawnStrategy): ParentServer @processCps = start(new ParentServer, as)
   }
-  class ParentServer private() extends StateServer[List[Process]] {
+  class ParentServer protected() extends StateServer[List[Process]] {
     protected[this] override def initialState = Nil
     protected[this] override def handleProcessEnd(end: ProcessEnd, state: List[Process]) = {
       Some(state.filterNot(_ == end.process))
@@ -231,12 +223,8 @@ class StateServerTest extends ProcessSpec with ShouldMatchers {
         parent ! "Terminated"
       }
     }
-    object SendTerminatePeopleStateServer {
-      def apply(parent: Process, as: SpawnStrategy) = {
-        val server = new SendTerminatePeopleStateServer(parent)
-        server.start(as)
-        server
-      }
+    object SendTerminatePeopleStateServer extends SpawnableCompanion[SendTerminatePeopleStateServer] {
+      def apply(parent: Process, as: SpawnStrategy) = start(new SendTerminatePeopleStateServer(parent), as)
     }
   
     it_("should have a way to react to normal termination") {
