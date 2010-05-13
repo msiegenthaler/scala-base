@@ -658,6 +658,54 @@ class BytesParsingSpec  extends Spec with ShouldMatchers {
           case otherwise => fail
         }
       }
+      it("should be possible to parse a list with complex content (one element)") {
+	val p0 = <<( byte, integer, byte )>>
+	val p = <<( list_to_end(p0) )>>
+	
+	val data = 1 :: 0 :: 0 :: 0 :: 2 :: 3 :: Nil map(_.toByte)
+	data match {
+	  case p(list, rest) =>
+	    rest should be(Nil)
+	    list should be((1, 2, 3) :: Nil)
+	  case otherwise => fail
+	}
+      }
+      it("should be possible to parse a list with complex content (three elements)") {
+	val p0 = <<( byte, integer, byte )>>
+	val p = <<( list_to_end(p0) )>>
+	
+	val data = 1 :: 0 :: 0 :: 0 :: 2 :: 3 :: 2 :: 0 :: 0 :: 0 :: 4 :: 3 :: 3 :: 0 :: 0 :: 0 :: 8 :: 3 :: Nil map(_.toByte)
+	data match {
+	  case p(list, rest) =>
+	    rest should be(Nil)
+	    list should be((1, 2, 3) :: (2, 4, 3) :: (3, 8, 3) :: Nil)
+	  case otherwise => fail
+	}
+      }
+      it("should be possible to serialize a list with complex content (one element)") {
+	val p0 = <<( byte, integer, byte )>>
+	val p = <<( list_to_end(p0) )>>
+	val data = 1 :: 0 :: 0 :: 0 :: 2 :: 3 :: Nil map(_.toByte)
+	
+	val r = p((1.toByte,2,3.toByte) :: Nil)
+	r should be(data)
+      }
+      it("should be possible to serialize a list with complex content (three elements)") {
+	val p0 = <<( byte, integer, byte )>>
+	val p = <<( list_to_end(p0) )>>
+	val data = 1 :: 0 :: 0 :: 0 :: 2 :: 3 :: 2 :: 0 :: 0 :: 0 :: 4 :: 3 :: 3 :: 0 :: 0 :: 0 :: 8 :: 3 :: Nil map(_.toByte)
+	
+	val r = p((1.toByte,2,3.toByte) :: (2.toByte,4,3.toByte) :: (3.toByte,8,3.toByte) :: Nil)
+	r should be(data)
+      }
+      it("should be possible to serialize a list with complex elements prefixed with a constant") {
+	val p0 = <<( byte, integer, byte )
+	val p = <<( fix_byte(0x02), list_to_end(p0) ).drop1
+	val data = 2 :: 1 :: 0 :: 0 :: 0 :: 2 :: 3 :: Nil map(_.toByte)
+	
+	val r = p((1.toByte,2,3.toByte) :: Nil)
+	r should be(data)
+      }
     }
     describe("real world examples") {
       case class FrameId(id: Byte)
