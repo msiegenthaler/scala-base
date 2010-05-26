@@ -16,14 +16,33 @@ object Messages {
    */
   trait MessageSelector[A] {
     def apply(): PartialFunction[Any,A @processCps] 
-    def apply[B](body: Function1[A,B @processCps]): PartialFunction[Any,B @processCps] = {
-      cpsPartialFunction(this).andThen_cps(body)
-    }
+    def apply[B](body: Function1[A,B @processCps]): PartialFunction[Any,B @processCps] = map_cps(body)()
     def value = apply()
     def option: PartialFunction[Any,Option[A] @processCps] = {
       apply(v => Some(v)).orElse_cps({
         case Timeout => None
       })
+    }
+    def map[B](fun: Function1[A,B]): MessageSelector[B] = {
+      val outer = this
+      new MessageSelector[B] {
+        override def apply() = {
+          val f = outer.apply()
+          new PartialFunction[Any,B @processCps] {
+            override def isDefinedAt(v: Any) = f.isDefinedAt(v)
+            override def apply(v: Any) = {
+              val a = f(v)
+              fun(a)
+            }
+          }
+        }
+      }
+    }
+    def map_cps[B](fun: Function1[A,B @processCps]): MessageSelector[B] = {
+      val outer = this
+      new MessageSelector[B] {
+        override def apply() = cpsPartialFunction(outer.apply()).andThen_cps(fun)
+      }
     }
     override def toString = "<message selector>"
   }

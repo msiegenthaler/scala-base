@@ -91,6 +91,25 @@ class MessagesSpec extends ProcessSpec with ShouldMatchers{
       val r = receiveWithin(500 ms)(s.loggedSlow(100 ms).option)
       r should be(Some("Huhu"))
     }
+    it_("should support mapping") {
+      val s = new MyServer
+      s log "Mario rocks"
+      val logSel = s.logged
+      val logSel2 = logSel.map(_ + "!")
+      val log = receive(logSel2)
+      log should be("Mario rocks!")
+    }
+    it_("should support mapping to a different type") {
+      val s = new MyServer
+      s log "Mario rocks"
+      val logSel = s.logged
+      val logSel2 = logSel.map(_ match {
+        case "Mario rocks" => true
+        case other => false
+      })
+      val log = receive(logSel2)
+      log should be(true)
+    }
   }
   describe("Request Token") {
     it_("should make it easy to spawn calculations as child processes") {
