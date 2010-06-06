@@ -30,7 +30,6 @@ object MDC {
 }
 
 trait Logger {
-  protected[this] def decorate(lvl: LoggerLevel) = lvl
   def error: LoggerLevel
   def warn: LoggerLevel
   def info: LoggerLevel
@@ -51,34 +50,34 @@ trait LoggerLevel {
 
 protected trait Slf4jLogger extends Logger {
   protected[this] val log: org.slf4j.Logger
-  val error = decorate {
+  val error = {
     new ArrayLoggerLevel with ProcessAwareLoggerLevel {
       override def enabled = log.isErrorEnabled
-      protected[this] override def applyArray(msg: String, ps: Array[String]) = log.error(msg, ps)
+      protected[this] override def applyArray(msg: String, ps: Array[String]) = around { log.error(msg, ps) }
     }
   }
-  val warn = decorate {
+  val warn = {
     new ArrayLoggerLevel with ProcessAwareLoggerLevel {
       override def enabled = log.isWarnEnabled
-      protected[this] override def applyArray(msg: String, ps: Array[String]) = log.warn(msg, ps)
+      protected[this] override def applyArray(msg: String, ps: Array[String]) = around { log.warn(msg, ps) }
     }
   }
-  val info = decorate {
+  val info = {
     new ArrayLoggerLevel with ProcessAwareLoggerLevel {
       override def enabled = log.isInfoEnabled
-      protected[this] override def applyArray(msg: String, ps: Array[String]) = log.info(msg, ps)
+      protected[this] override def applyArray(msg: String, ps: Array[String]) = around { log.info(msg, ps) }
     }
   }
-  val debug = decorate {
+  val debug = {
     new ArrayLoggerLevel with ProcessAwareLoggerLevel {
       override def enabled = log.isDebugEnabled
-      protected[this] override def applyArray(msg: String, ps: Array[String]) = log.debug(msg, ps)
+      protected[this] override def applyArray(msg: String, ps: Array[String]) = around { log.debug(msg, ps) }
     }
   }
-  val trace = decorate {
+  val trace = {
     new ArrayLoggerLevel with ProcessAwareLoggerLevel {
       override def enabled = log.isTraceEnabled
-      protected[this] override def applyArray(msg: String, ps: Array[String]) = log.trace(msg, ps)
+      protected[this] override def applyArray(msg: String, ps: Array[String]) = around { log.trace(msg, ps) }
     }
   }
 }
