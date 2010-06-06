@@ -174,7 +174,7 @@ final object ProcessCps extends Log {
     protected[this] def filterForUs(msg: Any) = processingFun.isDefinedAt(msg)
     protected[this] def respondReceive(oldState: ProcessState, respondToCaller: ProcessActionResponse[T], executor: ProcessExecutor)(msg: Any, pending: List[Any]) = {
       val state = oldState.withPending(pending)
-      if (log.isTraceEnabled) log.trace("{} received message '{}'", state.process.external, msg)
+      log.trace("{} received message '{}'", state.process.external, msg)
       val response = processingFun(msg)
       respondToCaller(response, state)
     }
@@ -184,7 +184,7 @@ final object ProcessCps extends Log {
     protected[this] def filterForUs(msg: Any) = processingFun.isDefinedAt(msg)
     protected[this] def respondReceive(oldState: ProcessState, respondToCaller: ProcessActionResponse[T], executor: ProcessExecutor)(msg: Any, pending: List[Any]) = {
       val state = oldState.withPending(pending)
-      if (log.isTraceEnabled) log.trace("{} received message '{}'", state.process.external, msg)
+      log.trace("{} received message '{}'", state.process.external, msg)
       val exec = new NestedExecution(processingFun, msg, executor)
       executor.executeStep(state, respondToCaller)(exec)
     }
@@ -281,11 +281,11 @@ final object ProcessCps extends Log {
     def !(msg: Any): Unit = {
       msg match {
         case msg: SystemMessage => 
-          if (log.isTraceEnabled) log.trace("{} enqueues system message '{}'", external, msg)
+          log.trace("{} enqueues system message '{}'", external, msg)
           systemQueue add msg
           if (msg.isInterrupting) messageQueue enqueue InterruptMessage
         case msg =>
-          if (log.isTraceEnabled) log.trace("{} enqueues message '{}'", external, msg)
+          log.trace("{} enqueues message '{}'", external, msg)
           messageQueue enqueue msg
       }
     }
@@ -297,7 +297,7 @@ final object ProcessCps extends Log {
       private[ProcessCps] override def run(state: ProcessState, respond: ProcessActionResponse[Any], executor: ProcessExecutor) = {
         executor.executeStep[Unit](state, respond) { (state, respond) =>
           runningProcessCount.incrementAndGet()
-          if (log.isDebugEnabled) {
+          log.debug.ifEnabled {
             terminationManager.parent match {
               case Some(parent) => log.debug("Started {} (child of {})", ProcessImpl.this, parent)
               case None => log.debug("Started {}", ProcessImpl.this)

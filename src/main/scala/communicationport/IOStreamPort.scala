@@ -91,7 +91,7 @@ case class IOStreamPortState[Res](reader: Process, writer: IOStreamPortWriter, r
  */
 class IOStreamPortReader(forwardDataTo: Process, maxPacketSize: Int, readDelay: Duration) extends Function1[InputStream,Unit @processCps] with Log {
   override def apply(input: InputStream) = {
-    log.trace("Create PortReader {}", self)
+    log.trace("Created PortReader")
     readLoop(input)
   }
   private def readLoop(input: InputStream): Unit @processCps = {
@@ -126,7 +126,8 @@ class IOStreamPortReader(forwardDataTo: Process, maxPacketSize: Int, readDelay: 
     if (continue) readLoop(input) else terminate(input)
   }
   protected[this] def terminate(input: InputStream) = {
-    log.trace("Close PortReader {}", self)
+    log.trace("Close PortReader")
+    noop
     input.close
   }
 }

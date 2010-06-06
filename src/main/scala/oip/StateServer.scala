@@ -62,10 +62,12 @@ trait StateServer[State] extends Spawnable with Log {
     override def isDefinedAt(msg: Any) = false
     override def apply(msg: Any) = Some(state)
   }
-  private[this] def unhandledMessageHandler(state: State): Handler = {
-    case any =>
-      log.debug("StateServer {} received unhandled message {}", StateServer.this, any)
+  private[this] def unhandledMessageHandler(state: State): Handler = new PartialFunction[Any,Option[State] @processCps] {
+    override def isDefinedAt(msg: Any) = true
+    override def apply(msg: Any) = {
+      log.debug("StateServer {} received unhandled message {}", StateServer.this, msg)
       Some(state)
+    }      
   }
   
   private[this] trait StateServerMessage
