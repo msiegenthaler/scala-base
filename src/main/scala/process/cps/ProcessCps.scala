@@ -361,7 +361,7 @@ final object ProcessCps extends Log {
     private[this] def preStep(state: ProcessState): ProcessState = {
       processSystemQueue(state, (from,s,reason) => throw new KillProcessException(from.external,s,reason))
     }
-    private[this] def processSystemQueue(state: ProcessState, killHandler: Function3[ProcessImpl,ProcessState,Any,Unit]): ProcessState = {
+    private[this] def processSystemQueue(state: ProcessState, killHandler: Function3[ProcessImpl,ProcessState,Throwable,Unit]): ProcessState = {
       val msg = state.systemQueue.poll
       if (msg != null) {
         val newState = msg match {
@@ -462,7 +462,7 @@ final object ProcessCps extends Log {
   private sealed trait SystemMessage {
     def isInterrupting: Boolean
   }
-  private case class Kill(killer: ProcessImpl, reason: Any) extends SystemMessage {
+  private case class Kill(killer: ProcessImpl, reason: Throwable) extends SystemMessage {
     val isInterrupting = true
   }
   private case class ChildTerminated(child: ProcessImpl) extends SystemMessage {
@@ -473,7 +473,7 @@ final object ProcessCps extends Log {
   }
   private object InterruptMessage
 
-  private case class KillProcessException(by: Process, state: ProcessState, reason: Any) extends RuntimeException
+  private case class KillProcessException(by: Process, state: ProcessState, reason: Throwable) extends RuntimeException
   
   private case class ProcessState(process: ProcessImpl, pendingMessages: List[Any], messageQueue: MessageQueue[Any], systemQueue: java.util.Queue[SystemMessage], children: List[Process], watcher: List[Process]) {
     def withPending(pendingMessages: List[Any]) = ProcessState(process, pendingMessages, messageQueue, systemQueue, children, watcher) 

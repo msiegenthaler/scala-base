@@ -14,7 +14,7 @@ case class ProcessExit(process: Process) extends ProcessEnd
 /**
  * Message that signals the killing of the process
  */
-case class ProcessKill(process: Process, by: Process, reason: Any) extends ProcessEnd
+case class ProcessKill(process: Process, by: Process, reason: Throwable) extends ProcessEnd
 /**
  * Message that signals the abnormal termination of the process.
  */
