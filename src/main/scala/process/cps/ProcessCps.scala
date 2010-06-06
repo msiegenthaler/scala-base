@@ -331,13 +331,13 @@ final object ProcessCps extends Log {
       case ProcessCrash(p, t) =>
         terminationManager.parent match {
           case Some(parent) => 
-	    log.debug("{} crashed with {}: {}. Will inform {}.", Array(p, t.getClass.getName, t.getMessage, parent))
-          case None => log.error("{} crashed", p, t)
+	    log.debug("{} crashed with {}: {}. Will inform {}.", p, t.getClass.getName, t.getMessage, parent)
+          case None => log.error("{} crashed with {}", p, t)
         }
       case ProcessExit(p) =>
         log.debug("{} terminated normally", p)
       case ProcessKill(p, by, reason) =>
-        log.debug("{} was killed by {} because of {}", Array(p, by, reason))
+        log.debug("{} was killed by {} because of {}", p, by, reason)
     }
     private[this] def informWatchersOfTermination(reason: ProcessEnd, watchers: List[Process]): Unit = watchers.foreach { watcher =>
       log.trace("Informing {} of termination of watched {}", watcher, external)
@@ -400,25 +400,8 @@ final object ProcessCps extends Log {
       }
       override def executeStep[T](state: ProcessState, respond: ProcessActionResponse[T])(f: (ProcessState, ProcessActionResponse[T]) => Unit) = {
         executionQueue <-- {
-//        nameThread { // costs a lot of performance
-            exec(state, respond)(f)
-//        } //nameThread
+          exec(state, respond)(f)
         }
-      }
-    }
-    
-    private[this] def nameThread[A](f: => A): A = {
-      val thread = Thread.currentThread
-      val oldName = thread.getName
-      try {
-        val pidString = pid.toString
-        val name = "Process "+ pidString
-        thread.setName(name + " @ " + oldName)
-        MDC("process", name) {
-          f
-        }
-      } finally {
-        thread.setName(oldName)
       }
     }
     

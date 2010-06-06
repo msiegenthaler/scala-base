@@ -53,31 +53,31 @@ protected trait Slf4jLogger extends Logger {
   val error = {
     new ArrayLoggerLevel with ProcessAwareLoggerLevel {
       override def enabled = log.isErrorEnabled
-      protected[this] override def applyArray(msg: String, ps: Array[String]) = around { log.error(msg, ps) }
+      protected[this] override def applyArray(msg: String, ps: Array[Object]) = around { log.error(msg, ps) }
     }
   }
   val warn = {
     new ArrayLoggerLevel with ProcessAwareLoggerLevel {
       override def enabled = log.isWarnEnabled
-      protected[this] override def applyArray(msg: String, ps: Array[String]) = around { log.warn(msg, ps) }
+      protected[this] override def applyArray(msg: String, ps: Array[Object]) = around { log.warn(msg, ps) }
     }
   }
   val info = {
     new ArrayLoggerLevel with ProcessAwareLoggerLevel {
       override def enabled = log.isInfoEnabled
-      protected[this] override def applyArray(msg: String, ps: Array[String]) = around { log.info(msg, ps) }
+      protected[this] override def applyArray(msg: String, ps: Array[Object]) = around { log.info(msg, ps) }
     }
   }
   val debug = {
     new ArrayLoggerLevel with ProcessAwareLoggerLevel {
       override def enabled = log.isDebugEnabled
-      protected[this] override def applyArray(msg: String, ps: Array[String]) = around { log.debug(msg, ps) }
+      protected[this] override def applyArray(msg: String, ps: Array[Object]) = around { log.debug(msg, ps) }
     }
   }
   val trace = {
     new ArrayLoggerLevel with ProcessAwareLoggerLevel {
       override def enabled = log.isTraceEnabled
-      protected[this] override def applyArray(msg: String, ps: Array[String]) = around { log.trace(msg, ps) }
+      protected[this] override def applyArray(msg: String, ps: Array[Object]) = around { log.trace(msg, ps) }
     }
   }
 }
@@ -98,14 +98,23 @@ protected trait ProcessAwareLoggerLevel {
 
 trait ArrayLoggerLevel extends LoggerLevel {
   override def apply(msg: String) = if (enabled) applyArray(msg, Array())
-  implicit private def asString(in: Any): String = if (in == null) "null" else in.toString
-  override def apply(msg: String, p1: => Any) = if (enabled) applyArray(msg, Array(p1))
-  override def apply(msg: String, p1: => Any, p2: => Any) = if (enabled) applyArray(msg, Array(p1, p2))
-  override def apply(msg: String, p1: => Any, p2: => Any, p3: => Any) = if (enabled) applyArray(msg, Array(p1, p2, p3))
-  override def apply(msg: String, p1: => Any, p2: => Any, p3: => Any, p4: => Any) = if (enabled) applyArray(msg, Array(p1, p2, p3, p4))
-  override def apply(msg: String, p1: => Any, p2: => Any, p3: => Any, p4: => Any, p5: => Any) = if (enabled) applyArray(msg, Array(p1, p2, p3, p4, p5))
+  override def apply(msg: String, p1: => Any) = if (enabled) {
+    applyArray(msg, Array(p1.asInstanceOf[AnyRef]))
+  }
+  override def apply(msg: String, p1: => Any, p2: => Any) = if (enabled) {
+    applyArray(msg, Array(p1.asInstanceOf[AnyRef], p2.asInstanceOf[AnyRef]))
+  }
+  override def apply(msg: String, p1: => Any, p2: => Any, p3: => Any) = if (enabled) {
+    applyArray(msg, Array(p1.asInstanceOf[AnyRef], p2.asInstanceOf[AnyRef], p3.asInstanceOf[AnyRef]))
+  }
+  override def apply(msg: String, p1: => Any, p2: => Any, p3: => Any, p4: => Any) = if (enabled) {
+    applyArray(msg, Array(p1.asInstanceOf[AnyRef], p2.asInstanceOf[AnyRef], p3.asInstanceOf[AnyRef], p4.asInstanceOf[AnyRef]))
+  }
+  override def apply(msg: String, p1: => Any, p2: => Any, p3: => Any, p4: => Any, p5: => Any) = if (enabled) {
+    applyArray(msg, Array(p1.asInstanceOf[AnyRef], p2.asInstanceOf[AnyRef], p3.asInstanceOf[AnyRef], p4.asInstanceOf[AnyRef], p5.asInstanceOf[AnyRef]))
+  }
   protected[this] def around(what: => Any): Any
-  protected[this] def applyArray(msg: String, ps: Array[String]): Unit 
+  protected[this] def applyArray(msg: String, ps: Array[Object]): Unit 
 }
 
 object IgnoreLoggerLevel extends LoggerLevel {
