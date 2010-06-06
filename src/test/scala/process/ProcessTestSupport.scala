@@ -13,10 +13,7 @@ object ProcessTestSupport {
       receive {
         case ProcessExit(`test`) => error.set(None)
         case ProcessCrash(`test`, reason) => error.set(Some(reason))
-        case ProcessKill(`test`, by, reason) => reason match {
-	  case t: Throwable => error.set(Some(new RuntimeException("killed by "+by, t)))
-	  case reason => error.set(Some(new RuntimeException("killed by "+by+": "+reason)))
-	}
+        case ProcessKill(`test`, by, reason) => error.set(Some(new RuntimeException("killed by "+by, reason)))
       }
     }
     error.get.foreach(throw _)
