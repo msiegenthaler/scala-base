@@ -13,16 +13,19 @@ object RingPerformance extends Log {
   def main(args: Array[String]) = {
     warmup
     log.info("Starting...")
-    runTestWith(100, 100000)
+    runTestWith(100, 1000000)
   }
   
   def warmup = {
     log.info("Warming up the ring...")
     val endVar = new scala.concurrent.SyncVar[Unit]
     val timer = startTimer(_ => endVar.set(()))
+    log.debug("Starting warmup nodes")
     val nodes = (1 to 100).map(id => startNode(id, timer, times => times < 50000)).toList 
+    log.debug("Connecting warmup nodes")
     connectNodes(nodes)
     
+    log.debug("Sending warmup message")
     nodes.head ! StartMessage
     
     endVar.get
@@ -40,7 +43,7 @@ object RingPerformance extends Log {
     
     nodes.head ! StartMessage
 //    nodes.head ! TokenMessage(-1, 1)
-    
+
     val duration = durationVar.get
     val msgCount = roundCount * nodeCount
     println("It took "+duration.amountAs(Milliseconds)+"ms to send a message "+roundCount+" times around "+nodeCount+" nodes ("+msgCount+" msgs)")

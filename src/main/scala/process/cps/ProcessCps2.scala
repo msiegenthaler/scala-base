@@ -11,7 +11,7 @@ import ExecutionQueues._
 object ProcessCps extends Log {
 
   def spawnProcess(executionQueue: ExecutionQueue)(body: => Any @processCps): Process = {
-    new ProcessImpl(executionQueue)
+    new ProcessImpl(executionQueue, body)
   }
 
   def self = SelfProcessAction.cps
@@ -235,7 +235,6 @@ object ProcessCps extends Log {
               process(rest, capture, msg :: messages)
           }
       }
-
       val (cap, coll) = process(toProcess.reverse, capture, messages)
       capture = cap
       messages = coll
@@ -303,21 +302,48 @@ object ProcessCps extends Log {
   }
 
 
+  private val IgnoreProcessResult = (res: Any, state: ProcessState) => ()
 
+  private final val pidDealer = new java.util.concurrent.atomic.AtomicLong(0)
   private class ProcessImpl(queue: ExecutionQueue) extends Process {
     private[ProcessCps] val messageBox: MessageBox[Any] = new MessageBox[Any](queue)
+    val pid = pidDealer.incrementAndGet
+
+    private[this] val flowHandler = new ProcessFlowHandler {
+      override def step = () //TODO check for kill
+      override def exception(e: Throwable) = {
+        //TODO
+      }
+      override def spawn(toexec: => Unit) = queue <-- toexec
+    }
 
     def this(queue: ExecutionQueue, body: => Any @processCps) = {
       this(queue)
-//      val toExecute = reset {
-//        firstFun.cps
-//        body
-//        lastFun
-//      }
+      val toExecute = reset {
+        firstFun.cps
+        body
+        lastFun
+      }
+      toExecute.run(ProcessState(this), IgnoreProcessResult, flowHandler)
     }
 
-    override def !(msg: Any) = {
+    private[this] def firstFun = new ProcessAction[Any] {
+      override def run(state: ProcessState, continue: ContinueProcess[Any], flow: ProcessFlowHandler) {
+        log.debug("Started {}", external)
+        continue((), state)
+      }
     }
+    private[this] def lastFun = new ProcessAction[Any] {
+      override def run(state: ProcessState, continue: ContinueProcess[Any], flow: ProcessFlowHandler) {
+        continue((), state)
+        //TODO termination logic
+        log.debug("Terminated {}", external)
+      }
+    }
+
+    override def !(msg: Any) = messageBox.enqueue(msg)
+
+    override def toString = "<Process-"+pid+">"
 
     val external: Process = this
   }
