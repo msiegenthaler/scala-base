@@ -8,7 +8,7 @@ import ch.inventsoft.scalabase.process._
 import ExecutionQueues._
 
 
-final object ProcessCps extends Log {
+final object ProcessCps3 extends Log {
   
   def spawnProcess(executionQueue: ExecutionQueue)(body: => Any @processCps): Process = {
     ProcessImpl(body, None, executionQueue)
@@ -63,14 +63,14 @@ final object ProcessCps extends Log {
   
  
   sealed trait ProcessAction[T] {
-    private[ProcessCps] def run(state: ProcessState, respond: ProcessActionResponse[T], executor: ProcessExecutor): Unit
+    private[ProcessCps3] def run(state: ProcessState, respond: ProcessActionResponse[T], executor: ProcessExecutor): Unit
 
-    private[ProcessCps] def cps: T @processCps = {
+    private[ProcessCps3] def cps: T @processCps = {
       shift { continuation: (T => ProcessAction[Any]) =>
         flatMap(continuation)
       }
     }
-    private[ProcessCps] def flatMap[A](next: T => ProcessAction[A]): ProcessAction[A] = {
+    private[ProcessCps3] def flatMap[A](next: T => ProcessAction[A]): ProcessAction[A] = {
       new ChainedProcessAction(this, next)
     }
   }
@@ -105,7 +105,7 @@ final object ProcessCps extends Log {
   }
 
   private trait ReceiveWithoutTimeout[T] extends ProcessAction[T] {
-    private[ProcessCps] override def run(state: ProcessState, respondToCaller: ProcessActionResponse[T], executor: ProcessExecutor) = {
+    private[ProcessCps3] override def run(state: ProcessState, respondToCaller: ProcessActionResponse[T], executor: ProcessExecutor) = {
       state.lookForExistingMessage(filter) match {
         case (Some(msg), pending) =>
           respondReceive(state, respondToCaller, executor)(msg, pending)
@@ -127,7 +127,7 @@ final object ProcessCps extends Log {
   private trait ReceiveWithTimeout[T] extends ProcessAction[T] {
     val timeout: Duration
     
-    private[ProcessCps] override def run(state: ProcessState, respondToCaller: ProcessActionResponse[T], executor: ProcessExecutor) = {
+    private[ProcessCps3] override def run(state: ProcessState, respondToCaller: ProcessActionResponse[T], executor: ProcessExecutor) = {
       state.lookForExistingMessage(filter) match {
         case (Some(msg), pending) => respondReceive(state, respondToCaller, executor)(msg, pending)
         case (None, pending) =>
@@ -199,13 +199,13 @@ final object ProcessCps extends Log {
     }
   }
   private class LastProcessAction(result: Any) extends ProcessAction[Any] {
-    private[ProcessCps] override def run(state: ProcessState, respond: ProcessActionResponse[Any], executor: ProcessExecutor) = {
+    private[ProcessCps3] override def run(state: ProcessState, respond: ProcessActionResponse[Any], executor: ProcessExecutor) = {
       respond(result, state)
     }
   }
   
   private class RespondNestedAction[A](value: A, otherRespond: ProcessActionResponse[A]) extends ProcessAction[Unit] {
-    private[ProcessCps] override def run(state: ProcessState, respond: ProcessActionResponse[Unit], executor: ProcessExecutor) = {
+    private[ProcessCps3] override def run(state: ProcessState, respond: ProcessActionResponse[Unit], executor: ProcessExecutor) = {
       otherRespond(value, state)
       respond((), state)
     }
@@ -217,7 +217,7 @@ final object ProcessCps extends Log {
   private class NestedReceiveWithinAction[T](val timeout: Duration, protected[this] val processingFun: PartialFunction[Any,T @processCps]) extends NestedRespondAction[T] with ReceiveWithTimeout[T]
   
   private class SelfAction extends ProcessAction[Process] {
-    private[ProcessCps] override def run(state: ProcessState, respond: ProcessActionResponse[Process], executor: ProcessExecutor) = {
+    private[ProcessCps3] override def run(state: ProcessState, respond: ProcessActionResponse[Process], executor: ProcessExecutor) = {
       val process = state.process.external
       respond(process, state)
       ()
@@ -228,7 +228,7 @@ final object ProcessCps extends Log {
   }
   
   private class AddChildProcessAction(child: Process) extends ProcessAction[Unit] {
-    private[ProcessCps] override def run(state: ProcessState, respond: ProcessActionResponse[Unit], executor: ProcessExecutor) = {
+    private[ProcessCps3] override def run(state: ProcessState, respond: ProcessActionResponse[Unit], executor: ProcessExecutor) = {
       val children = child :: state.children
       respond((), state.withChildren(children))
       ()
@@ -294,7 +294,7 @@ final object ProcessCps extends Log {
     
      
     private[this] def firstFun = new ProcessAction[Any] {
-      private[ProcessCps] override def run(state: ProcessState, respond: ProcessActionResponse[Any], executor: ProcessExecutor) = {
+      private[ProcessCps3] override def run(state: ProcessState, respond: ProcessActionResponse[Any], executor: ProcessExecutor) = {
         executor.executeStep[Unit](state, respond) { (state, respond) =>
           runningProcessCount.incrementAndGet()
           log.debug.ifEnabled {
@@ -308,7 +308,7 @@ final object ProcessCps extends Log {
       }
     }    
     private[this] def lastFun = new ProcessAction[Any] {
-      private[ProcessCps] override def run(state: ProcessState, respond: ProcessActionResponse[Any], executor: ProcessExecutor) = {
+      private[ProcessCps3] override def run(state: ProcessState, respond: ProcessActionResponse[Any], executor: ProcessExecutor) = {
         respond((), state)
         terminate(ProcessExit(external), state)
       }
@@ -508,7 +508,7 @@ final object ProcessCps extends Log {
       this()
       reference = Left(process)
     }
-    private[ProcessCps] def terminated(process: ProcessImpl) = {
+    private[ProcessCps3] def terminated(process: ProcessImpl) = {
       reference = Right(process.pid)
     }
       
