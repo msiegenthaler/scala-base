@@ -11,7 +11,11 @@ import ExecutionQueues._
 object ProcessCps extends Log {
 
   def spawnProcess(executionQueue: ExecutionQueue)(body: => Any @processCps): Process = {
-    new ProcessImpl(executionQueue, body)
+    ProcessImpl.root(executionQueue, body)
+  }
+  def spawnChildProcess(executionQueue: ExecutionQueue, kind: ChildType, body: => Any @processCps): Process @processCps = {
+    val parent = self
+    ProcessImpl.child(parent, kind, executionQueue, body)
   }
 
   def self = SelfProcessAction.cps
@@ -22,14 +26,7 @@ object ProcessCps extends Log {
   }
   def receiveNoWait[T](fun: PartialFunction[Any,T @processCps]) = new ReceiveNoWaitProcessAction(fun).cps
   
-  //TODO
-  def watch(toWatch: Process) = noop
-  //TODO
-  def spawnChildProcess(executionQueue: ExecutionQueue, kind: ChildType, body: => Any @processCps): Process @processCps = {
-    //TODO
-    noop
-    spawnProcess(executionQueue)(body)
-  }
+  def watch(toWatch: Process) = new WatchProcessAction(toWatch).cps
 
   //TODO
   object useWithCare {
@@ -292,9 +289,38 @@ object ProcessCps extends Log {
     }
   }
 
+  /**
+   * Register us as a watcher to another process.
+   */
+  private class WatchProcessAction(toWatch: Process) extends ProcessAction[Unit] {
+    override def run(state: ProcessState, continue: ContinueProcess[Unit], flow: ProcessFlowHandler) = {
+      val watcher = state.process.external
+      //TODO
+      continue((), state)
+    }
+  }
+
   
   //TODO parent/child
-  //TODO watch
+
+  /**
+   * Handler for process termination.
+   */
+  private trait TerminationManager {
+    def parent: Option[Process]
+    def handleNormalTermination(process: Process): Unit
+    def handleException(process: Process, t: Throwable): Unit 
+  }
+
+  private object RootProcessTerminationManager extends TerminationManager {
+    override def parent = None
+    override def handleNormalTermination(process: Process) = {
+      log.debug("Process {} terminated normally", process)
+    }
+    override def handleException(process: Process, t: Throwable) = {
+      log.warn("Process {} crashed with {}: {}", process, t.getClass.getSimpleName, t.getMessage)
+    }
+  }
 
 
   private case class ProcessState(process: ProcessImpl) {
@@ -304,27 +330,55 @@ object ProcessCps extends Log {
 
   private val IgnoreProcessResult = (res: Any, state: ProcessState) => ()
 
-  private final val pidDealer = new java.util.concurrent.atomic.AtomicLong(0)
-  private class ProcessImpl(queue: ExecutionQueue) extends Process {
-    private[ProcessCps] val messageBox: MessageBox[Any] = new MessageBox[Any](queue)
-    val pid = pidDealer.incrementAndGet
+  object ProcessImpl {
 
-    private[this] val flowHandler = new ProcessFlowHandler {
-      override def step = () //TODO check for kill
-      override def exception(e: Throwable) = {
-        //TODO
-      }
-      override def spawn(toexec: => Unit) = queue <-- toexec
+    def root(queue: ExecutionQueue, body: => Any @processCps): Process = {
+      new ProcessImpl(queue, RootProcessTerminationManager, body)
+    }
+    def child(parent: Process, childType: ChildType, queue: ExecutionQueue, body: => Any @processCps): Process = {
+      //TODO
+      null
     }
 
-    def this(queue: ExecutionQueue, body: => Any @processCps) = {
-      this(queue)
+    private val current = new ThreadLocal[Option[Process]] {
+      override def initialValue = None
+    }
+    def currentProcess: Option[Process] = current.get
+  }
+  private final val pidDealer = new java.util.concurrent.atomic.AtomicLong(0)
+
+  private class ProcessImpl(queue_org: ExecutionQueue, terminationManager: TerminationManager) extends Process {
+    def this(queue: ExecutionQueue, tm: TerminationManager, body: => Any @processCps) = {
+      this(queue, tm)
       val toExecute = reset {
         firstFun.cps
         body
         lastFun
       }
       toExecute.run(ProcessState(this), IgnoreProcessResult, flowHandler)
+    }
+
+    val pid = pidDealer.incrementAndGet
+    private[ProcessCps] val messageBox: MessageBox[Any] = new MessageBox[Any](queue)
+    val queue = new ExecutionQueue {
+      private[this] val me = Some(ProcessImpl.this)
+      override def execute(f: => Unit) = queue_org <-- {
+        ProcessImpl.current.set(Some(ProcessImpl.this))
+        try {
+          f
+        } finally {
+          ProcessImpl.current.set(None)
+        }
+      }
+    }
+    private[this] val flowHandler = new ProcessFlowHandler {
+      override def step = {
+        //todo check for kill
+      }
+      override def exception(e: Throwable) = {
+        //TODO handle
+      }
+      override def spawn(toexec: => Unit) = queue <-- toexec
     }
 
     private[this] def firstFun = new ProcessAction[Any] {
@@ -344,8 +398,7 @@ object ProcessCps extends Log {
     override def !(msg: Any) = messageBox.enqueue(msg)
 
     override def toString = "<Process-"+pid+">"
-
-    val external: Process = this
+    val external: Process = this //todo let gc collect us we don't have a 'internal' reference anymore
   }
 
 
