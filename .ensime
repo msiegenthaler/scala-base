@@ -5,14 +5,7 @@
 	:server-env ()
 
 	:project-package "ch.inventsoft.scalabase"
-	:source ("src/main/scala")
-	:exclude-source ()
-	:classpath ("lib/jsr166y.jar"
-		    "lib_managed/scala_2.8.0-SNAPSHOT/compile/logback-classic-0.9.20.jar"
-		    "lib_managed/scala_2.8.0-SNAPSHOT/compile/logback-core-0.9.20.jar"
-		    "lib_managed/scala_2.8.0-SNAPSHOT/compile/slf4j-api-1.5.11.jar"
-		    "lib_managed/scala_2.8.0-SNAPSHOT/plugin/continuations-2.8.0-SNAPSHOT.jar"
-		    "project/boot/scala-2.8.0-SNAPSHOT/lib/scala-compiler.jar"
-		    "project/boot/scala-2.8.0-SNAPSHOT/lib/scala-library.jar"
-		    "lib_managed/scala_2.8.0-SNAPSHOT/test/scalatest-1.0.1-for-scala-2.8.0.RC1-SNAPSHOT.jar")		    
+        :use-sbt t
+        :sbt-compile-conf "compile"
+        :sbt-runtime-conf "runtime"
 )
