@@ -27,10 +27,8 @@ object ProcessCps extends Log {
   
   def watch(toWatch: Process) = new WatchProcessAction(toWatch).cps
 
-  //TODO
   object useWithCare {
-    //TODO
-    def currentProcess: Option[Process] = None
+    def currentProcess: Option[Process] = ProcessImpl.currentProcess
   }
 
 
@@ -57,7 +55,7 @@ object ProcessCps extends Log {
     /**
      * Execute a step. Might throw an exception that should be passed to #exception.
      */
-    def step: Unit
+    def step(state: ProcessState): ProcessState
     /**
      * Handle an unhandled exception by the process. The process will not continue.
      */
@@ -89,8 +87,8 @@ object ProcessCps extends Log {
     protected[this] def body(state: ProcessState, continue: ContinueProcess[T])
     private[ProcessCps] final def run(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler) = {
       try {
-        flow.step
-        body(state, continue)
+        val s1 = flow.step(state)
+        body(s1, continue)
       } catch {
         case t => flow.exception(t) 
       }
@@ -107,8 +105,8 @@ object ProcessCps extends Log {
         new ValueProcessAction[Any](r)
       }
       try {
-        flow.step
-        action.run(state, continue.asInstanceOf[ContinueProcess[Any]], flow)
+        val s1 = flow.step(state)
+        action.run(s1, continue.asInstanceOf[ContinueProcess[Any]], flow)
       } catch {
         case t => flow.exception(t)
       }
@@ -314,32 +312,30 @@ object ProcessCps extends Log {
    */
   private class WatchProcessAction(toWatch: Process) extends ProcessAction[Unit] {
     override def run(state: ProcessState, continue: ContinueProcess[Unit], flow: ProcessFlowHandler) = {
-      val watcher = state.process.external
-      //TODO
+      val watcher = state.process
+      toWatch match {
+        case toWatch: ProcessInternal =>
+          toWatch.addWatcher(watcher)
+          //TODO also add to a 'watched' list
+        case _ =>
+          log.error("Unknown Process type for {}. Cannot add watcher {}", toWatch, watcher)
+      }
       continue((), state)
     }
   }
 
   /** "Management" view onto a process. All declared methods behave like .!() (async, no exeception) */
   private trait ProcessInternal extends Process {
-    /**
-     * Forcefully stop the process on the next possible location;
-     */
+    /** Forcefully stop the process on the next possible location */
     def kill(killer: ProcessInternal, originalKiller: Process, reason: Throwable): Unit
     
-    /**
-     * Executes the action on every child of the process
-     */
+    def removeChild(child: ProcessInternal): Unit
+    /** Executes the action on every child of the process */
     def foreachChild(action: ProcessInternal => Unit): Unit
 
-    /**
-     * Removes a child of the process. Noop if not a child.
-     */
-    def removeChild(child: ProcessInternal): Unit
-
-    /**
-     * Executes the action on every watcher of the process.
-     */
+    def addWatcher(watcher: Process): Unit
+    def removeWatcher(watcher: Process): Unit
+    /** Executes the action on every watcher of the process */
     def foreachWatcher(action: Process => Unit): Unit
   }
   
@@ -347,10 +343,10 @@ object ProcessCps extends Log {
    * Handler for process termination.
    */
   private trait ProcessListener {
-    def onStart(of: ProcessInternal): Unit
-    def onNormalTermination(of: ProcessInternal): Unit
-    def onKill(of: ProcessInternal, by: ProcessInternal, originalBy: Process, reason: Throwable): Unit
-    def onException(in: ProcessInternal, cause: Throwable): Unit
+    def onStart(of: ProcessInternal) = ()
+    def onNormalTermination(of: ProcessInternal) = ()
+    def onKill(of: ProcessInternal, by: ProcessInternal, originalBy: Process, reason: Throwable) = ()
+    def onException(in: ProcessInternal, cause: Throwable) = ()
   }
   
   /** Log the normal stop */
@@ -479,7 +475,7 @@ object ProcessCps extends Log {
           with RemoveChildFromParentPL
 
 
-  private case class ProcessState(process: ProcessImpl, children: List[ProcessImpl]) {
+  private case class ProcessState(process: ProcessImpl, children: List[ProcessInternal], watchers: List[Process]) {
     def messageBox = process.messageBox
   }
 
@@ -517,11 +513,11 @@ object ProcessCps extends Log {
         body
         lastFun
       }
-      toExecute.run(ProcessState(this, Nil), IgnoreProcessResult, flowHandler)
+      toExecute.run(ProcessState(this, Nil, Nil), IgnoreProcessResult, flowHandler)
     }
 
     val pid = pidDealer.incrementAndGet
-    private[ProcessCps] val messageBox: MessageBox[Any] = new MessageBox[Any](queue)
+/*
     val queue = new ExecutionQueue {
       private[this] val me = Some(ProcessImpl.this)
       override def execute(f: => Unit) = queue_org <-- {
@@ -533,22 +529,35 @@ object ProcessCps extends Log {
         }
       }
     }
+*/
+    val queue = queue_org
+    val messageBox: MessageBox[Any] = new MessageBox[Any](queue)
+    private[this] val mgmtSteps = new java.util.concurrent.LinkedBlockingQueue[ProcessState => ProcessState]
     private[this] val flowHandler = new ProcessFlowHandler {
-      override def step = {
-        //TODO check for kill
+      override def step(state: ProcessState) = {
+/*
+        mgmtSteps.poll match {
+          case null =>
+            //99% case
+            state
+          case action =>
+            //mgmt action like adding a child or letting the process crash (see ProcessInternal)
+            val s1 = action(state)
+            step(s1)
+        }
+        */
+        state
       }
       override def exception(e: Throwable) = e match {
-//        case KillProcess(by, originalBy, reason) =>
-//          terminationManager.handleKill(ProcessImpl.this, by, originalBy, reason)
+        case KillTheProcess(by, originalBy, reason) =>
+          listener.onKill(ProcessImpl.this, by, originalBy, reason)
         case e =>
           listener.onException(ProcessImpl.this, e)
       }
-      override def spawn(toexec: => Unit) = queue <-- toexec
+      override def spawn(toexec: => Unit) = {
+        queue <-- toexec
+      }
     }
-
-    //TODO crashing parent must kill children
-
-    //TODO parent must maintain a list of its children (remove them on termination)
 
     private[this] def firstFun = new ProcessAction[Any] {
       override def run(state: ProcessState, continue: ContinueProcess[Any], flow: ProcessFlowHandler) {
@@ -563,11 +572,41 @@ object ProcessCps extends Log {
       }
     }
 
+    override def kill(killer: ProcessInternal, originalKiller: Process, reason: Throwable) = mgmtStep { state =>
+      throw new KillTheProcess(killer, originalKiller, reason)
+    }
+    override def foreachChild(action: ProcessInternal => Unit) = mgmtStep { state =>
+      state.children.foreach(action(_))
+      state
+    }
+    override def removeChild(child: ProcessInternal) = mgmtStep { state =>
+      val nc = state.children.filterNot(_ == child)
+      state.copy(children = nc)
+    }
+    override def foreachWatcher(action: Process => Unit) = mgmtStep { state =>
+      state.watchers.foreach(action(_))
+      state
+    }
+    override def addWatcher(watcher: Process) = mgmtStep { state =>
+      state.copy(watchers = watcher :: state.watchers)
+    }
+    override def removeWatcher(watcher: Process) = mgmtStep { state =>
+      val nw = state.watchers.filterNot(_ == watcher)
+      state.copy(watchers = nw)
+    }
+
+    //TODO remove terminated watchers?
+
+    private[this] def mgmtStep(action: ProcessState => ProcessState) = {
+      mgmtSteps.offer(action)
+    }
+
     override def !(msg: Any) = messageBox.enqueue(msg)
 
     override def toString = "<Process-"+pid+">"
+
     val external: Process = this //TODO let gc collect us we don't have a 'internal' reference anymore
   }
-
+  private case class KillTheProcess(by: ProcessInternal, originalBy: Process, reason: Throwable) extends Exception(reason)
 
 }
