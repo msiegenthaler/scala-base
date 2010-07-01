@@ -313,14 +313,15 @@ object ProcessCps extends Log {
   private class WatchProcessAction(toWatch: Process) extends ProcessAction[Unit] {
     override def run(state: ProcessState, continue: ContinueProcess[Unit], flow: ProcessFlowHandler) = {
       val watcher = state.process
-      toWatch match {
+      val s = toWatch match {
         case toWatch: ProcessInternal =>
           toWatch.addWatcher(watcher)
-          //TODO also add to a 'watched' list
+          state.copy(watched = toWatch :: state.watched)
         case _ =>
           log.error("Unknown Process type for {}. Cannot add watcher {}", toWatch, watcher)
+          state
       }
-      continue((), state)
+      continue((), s)
     }
   }
 
@@ -337,6 +338,8 @@ object ProcessCps extends Log {
     def removeWatcher(watcher: Process): Unit
     /** Executes the action on every watcher of the process */
     def foreachWatcher(action: Process => Unit): Unit
+    /** Executes the action on every process this process is watching */
+    def foreachWatched(action: ProcessInternal => Unit): Unit
   }
   
   /**
@@ -385,14 +388,17 @@ object ProcessCps extends Log {
   private trait WatcherSupportPL extends ProcessListener {
     override def onNormalTermination(of: ProcessInternal) = {
       super.onNormalTermination(of)
+      of.foreachWatched(_.removeWatcher(of))
       of.foreachWatcher(_ ! ProcessExit(of))
     }
     override def onException(in: ProcessInternal, cause: Throwable) = {
       super.onException(in, cause)
+      in.foreachWatched(_.removeWatcher(in))
       in.foreachWatcher(_ ! ProcessCrash(in, cause))
     }
     override def onKill(of: ProcessInternal, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
       super.onKill(of, by, originalBy, reason)
+      of.foreachWatched(_.removeWatcher(of))
       of.foreachWatcher(_ ! ProcessKill(of, by, reason))
     }
   }
@@ -475,7 +481,10 @@ object ProcessCps extends Log {
           with RemoveChildFromParentPL
 
 
-  private case class ProcessState(process: ProcessImpl, children: List[ProcessInternal], watchers: List[Process]) {
+  /**
+   * State of a process
+   */
+  private case class ProcessState(process: ProcessImpl, children: List[ProcessInternal], watchers: List[Process], watched: List[ProcessInternal]) {
     def messageBox = process.messageBox
   }
 
@@ -513,7 +522,7 @@ object ProcessCps extends Log {
         body
         lastFun
       }
-      toExecute.run(ProcessState(this, Nil, Nil), IgnoreProcessResult, flowHandler)
+      toExecute.run(ProcessState(this, Nil, Nil, Nil), IgnoreProcessResult, flowHandler)
     }
 
     val pid = pidDealer.incrementAndGet
@@ -597,8 +606,10 @@ object ProcessCps extends Log {
       val nw = state.watchers.filterNot(_ == watcher)
       state.copy(watchers = nw)
     }
-
-    //TODO remove terminated watchers?
+    override def foreachWatched(action: ProcessInternal => Unit) = mgmtStep { state =>
+      state.watched.foreach(action(_))
+      state
+    }
 
     private[this] def mgmtStep(action: ProcessState => ProcessState): Unit = {
       val steps = mgmtSteps.get
