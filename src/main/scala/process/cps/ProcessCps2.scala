@@ -518,6 +518,8 @@ object ProcessCps extends Log {
 
     val pid = pidDealer.incrementAndGet
 /*
+    //TODO this is very slow, use something more efficient or find a different solution for this
+    // 'unsafe' feature
     val queue = new ExecutionQueue {
       private[this] val me = Some(ProcessImpl.this)
       override def execute(f: => Unit) = queue_org <-- {
@@ -532,21 +534,22 @@ object ProcessCps extends Log {
 */
     val queue = queue_org
     val messageBox: MessageBox[Any] = new MessageBox[Any](queue)
-    private[this] val mgmtSteps = new java.util.concurrent.LinkedBlockingQueue[ProcessState => ProcessState]
+    private[this] val mgmtSteps = new java.util.concurrent.atomic.AtomicReference[List[ProcessState => ProcessState]](Nil)
     private[this] val flowHandler = new ProcessFlowHandler {
       override def step(state: ProcessState) = {
-/*
-        mgmtSteps.poll match {
-          case null =>
-            //99% case
-            state
-          case action =>
-            //mgmt action like adding a child or letting the process crash (see ProcessInternal)
-            val s1 = action(state)
-            step(s1)
+        def removeSteps(count: Int): Unit = {
+          val c = mgmtSteps.get
+          if (!mgmtSteps.compareAndSet(c, c.take(count)))
+            removeSteps(count) //try again
         }
-        */
-        state
+
+        mgmtSteps.get match {
+          case Nil => state
+          case actions =>
+            val s2 = actions.foldRight(state)((a,s) => a(s))
+            if (!mgmtSteps.compareAndSet(actions, Nil)) removeSteps(actions.size)
+            s2
+        }
       }
       override def exception(e: Throwable) = e match {
         case KillTheProcess(by, originalBy, reason) =>
@@ -597,8 +600,10 @@ object ProcessCps extends Log {
 
     //TODO remove terminated watchers?
 
-    private[this] def mgmtStep(action: ProcessState => ProcessState) = {
-      mgmtSteps.offer(action)
+    private[this] def mgmtStep(action: ProcessState => ProcessState): Unit = {
+      val steps = mgmtSteps.get
+      if (!mgmtSteps.compareAndSet(steps, action :: steps))
+        mgmtStep(action)  //try again
     }
 
     override def !(msg: Any) = messageBox.enqueue(msg)
