@@ -209,20 +209,21 @@ object ProcessCps extends Log {
      * - calls processMsgs for every message
      */
     private[this] def check = {
-      def emptyOrContinue(processed: List[Any]): Unit = {
+      def emptyOrContinue(processed: List[Any], processedLen: Int): Unit = {
         if (!inQueue.compareAndSet(processed, Nil, true, false)) {
           //queue has changed since we checked it
           // => process the newly added messages
           val p2 = inQueue.getReference
-          val newMsgs = p2.take(p2.length - processed.length)
+          val len_p2 = p2.length
+          val newMsgs = p2.take(len_p2 - processedLen)
           processMsgs(newMsgs)
-          emptyOrContinue(p2)
+          emptyOrContinue(p2, len_p2)
         }
       }
 
       val toProcess = inQueue.getReference
       processMsgs(toProcess)
-      emptyOrContinue(toProcess)
+      emptyOrContinue(toProcess, toProcess.length)
     }
     private[this] def processMsgs(toProcess: List[Any]) = { //only active in one thread
       def process(msgs: List[Any], capture: Option[Capture], messages: List[T]): (Option[Capture], List[T]) = msgs match {
@@ -526,7 +527,6 @@ object ProcessCps extends Log {
     }
 
     val pid = pidDealer.incrementAndGet
-/*
     //TODO this is very slow, use something more efficient or find a different solution for this
     // 'unsafe' feature
     val queue = new ExecutionQueue {
@@ -540,8 +540,7 @@ object ProcessCps extends Log {
         }
       }
     }
-*/
-    val queue = queue_org
+//    val queue = queue_org
     val messageBox: MessageBox[Any] = new MessageBox[Any](queue)
     private[this] val mgmtSteps = new java.util.concurrent.atomic.AtomicReference[List[ProcessState => ProcessState]](Nil)
     private[this] val flowHandler = new ProcessFlowHandler {
