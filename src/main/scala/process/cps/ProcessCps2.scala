@@ -14,8 +14,7 @@ object ProcessCps extends Log {
     ProcessImpl.root(executionQueue, body)
   }
   def spawnChildProcess(executionQueue: ExecutionQueue, kind: ChildType, body: => Any @processCps): Process @processCps = {
-    val parent = self
-    ProcessImpl.child(parent, kind, executionQueue, body)
+    new SpawnChildProcessAction(executionQueue, kind, body).cps
   }
 
   def self = SelfProcessAction.cps
@@ -55,8 +54,18 @@ object ProcessCps extends Log {
 
   private type ContinueProcess[T] = Function2[T,ProcessState,Unit]
   private trait ProcessFlowHandler {
+    /**
+     * Execute a step. Might throw an exception that should be passed to #exception.
+     */
     def step: Unit
+    /**
+     * Handle an unhandled exception by the process. The process will not continue.
+     */
     def exception(e: Throwable): Unit
+    /**
+     * Execute the 'toexec' in the same executor as the process runs. Must not be used
+     * to start concurrent tasks but only to continue the execution of the process.
+     */
     def spawn(toexec: => Unit): Unit
   }
 
@@ -125,13 +134,24 @@ object ProcessCps extends Log {
     }
   }
 
+  /**
+   * ProcessAction spawning a child process.
+   */
+  private class SpawnChildProcessAction(executionQueue: ExecutionQueue, kind: ChildType, body: => Any @processCps) extends ProcessAction[Process] {
+    override def run(state: ProcessState, continue: ContinueProcess[Process], flow: ProcessFlowHandler) = {
+      val me = state.process 
+      val child = ProcessImpl.child(me, kind, executionQueue, body)
+      //TODO add to state?
+      continue(child, state)
+    }
+  }
 
   /**
    * Message box for many senders and a single consumer.
    */
 //TODO idea: we could only spawn a checker if a capture is active
 // - add a second paramter to the inQueue (alreadyChecking, capturePossiblyActive)
-  class MessageBox[T](checkExec: ExecutionQueue) {
+  private class MessageBox[T](checkExec: ExecutionQueue) {
     import java.util.concurrent.atomic._
     import ch.inventsoft.scalabase.extcol.ListUtil._
     type Capture = PartialFunction[T,Unit]
@@ -300,44 +320,186 @@ object ProcessCps extends Log {
     }
   }
 
-  
-  //TODO parent/child
+  /** "Management" view onto a process. All declared methods behave like .!() (async, no exeception) */
+  private trait ProcessInternal extends Process {
+    /**
+     * Forcefully stop the process on the next possible location;
+     */
+    def kill(killer: ProcessInternal, originalKiller: Process, reason: Throwable): Unit
+    
+    /**
+     * Executes the action on every child of the process
+     */
+    def foreachChild(action: ProcessInternal => Unit): Unit
 
+    /**
+     * Removes a child of the process. Noop if not a child.
+     */
+    def removeChild(child: ProcessInternal): Unit
+
+    /**
+     * Executes the action on every watcher of the process.
+     */
+    def foreachWatcher(action: Process => Unit): Unit
+  }
+  
   /**
    * Handler for process termination.
    */
-  private trait TerminationManager {
-    def parent: Option[Process]
-    def handleNormalTermination(process: Process): Unit
-    def handleException(process: Process, t: Throwable): Unit 
+  private trait ProcessListener {
+    def onStart(of: ProcessInternal): Unit
+    def onNormalTermination(of: ProcessInternal): Unit
+    def onKill(of: ProcessInternal, by: ProcessInternal, originalBy: Process, reason: Throwable): Unit
+    def onException(in: ProcessInternal, cause: Throwable): Unit
+  }
+  
+  /** Log the normal stop */
+  private trait LogNormalStopPL extends ProcessListener {
+    override def onNormalTermination(of: ProcessInternal) = {
+      super.onNormalTermination(of)
+      log.debug("{} has finished", of)
+    }
+  }
+  /** Logs the killing of the process */
+  private trait LogKillPL extends ProcessListener {
+    override def onKill(of: ProcessInternal, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
+      super.onKill(of, by, originalBy, reason)
+      if (by == originalBy) {
+        log.info("{} was killed by {} due to {}: {}", of, by, reason.getClass.getSimpleName, reason.getMessage)
+      } else {
+        log.info("{} was killed by {} because {} crashed with {}: {}", of, by, originalBy, reason.getClass.getSimpleName, reason.getMessage)
+      }
+    }      
+  }
+  /** Logs a warning for unexpected crashing processes */
+  private trait WarnCrashPL extends ProcessListener {
+    override def onException(in: ProcessInternal, cause: Throwable) = {
+      super.onException(in, cause)
+      log.warn("{} crashed with {}: {}", in, cause.getClass.getSimpleName, cause.getMessage)
+    }
+  }
+  /** Logs expectedly crashing processes */
+  private trait LogCrashPL extends ProcessListener {
+    override def onException(in: ProcessInternal, cause: Throwable) = {
+      super.onException(in, cause)
+      log.debug("{} crashed with {}: {}", in, cause.getClass.getSimpleName, cause.getMessage)
+    }
+  }
+  /** Responsible for informing the watchers about this processes end */
+  private trait WatcherSupportPL extends ProcessListener {
+    override def onNormalTermination(of: ProcessInternal) = {
+      super.onNormalTermination(of)
+      of.foreachWatcher(_ ! ProcessExit(of))
+    }
+    override def onException(in: ProcessInternal, cause: Throwable) = {
+      super.onException(in, cause)
+      in.foreachWatcher(_ ! ProcessCrash(in, cause))
+    }
+    override def onKill(of: ProcessInternal, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
+      super.onKill(of, by, originalBy, reason)
+      of.foreachWatcher(_ ! ProcessKill(of, by, reason))
+    }
+  }
+  /** Logs the start of a child */
+  private trait LogChildPL extends ProcessListener {
+    val parent: Process
+    override def onStart(of: ProcessInternal) = {
+      super.onStart(of)
+      log.debug("{} started (child of {})", of, parent)
+    }
+  }
+  /** Kills the parent process if the child crashes or is killed */
+  private trait KillParentOnNonNormalPL extends ProcessListener {
+    val parent: ProcessInternal
+    override def onException(in: ProcessInternal, cause: Throwable) = {
+      super.onException(in, cause)
+      parent.kill(in, in, cause)
+    }
+    override def onKill(of: ProcessInternal, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
+      super.onKill(of, by, originalBy, reason)
+      if (by != parent) parent.kill(of, originalBy, reason)
+    }
+  }
+  /** Sends ProcessEnd messages to the parent */
+  private trait ParentAsWatcherPL extends ProcessListener {
+    val parent: Process
+    override def onNormalTermination(of: ProcessInternal) = {
+      super.onNormalTermination(of)
+      parent ! ProcessExit(of)
+    }
+    override def onException(in: ProcessInternal, cause: Throwable) = {
+      super.onException(in, cause)
+      parent ! ProcessCrash(in, cause)
+    }
+    override def onKill(of: ProcessInternal, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
+      super.onKill(of, by, originalBy, reason)
+      parent ! ProcessKill(of, by, reason)
+    }
+  }
+  /** Removes the child from the parent on process ends (all) */
+  private trait RemoveChildFromParentPL extends ProcessListener {
+    val parent: ProcessInternal
+    override def onNormalTermination(of: ProcessInternal) = {
+      super.onNormalTermination(of)
+      parent.removeChild(of)
+    }
+    override def onException(in: ProcessInternal, cause: Throwable) = {
+      super.onException(in, cause)
+      parent.removeChild(in)
+    }
+    override def onKill(of: ProcessInternal, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
+      super.onKill(of, by, originalBy, reason)
+      parent.removeChild(of)
+    }
   }
 
-  private object RootProcessTerminationManager extends TerminationManager {
-    override def parent = None
-    override def handleNormalTermination(process: Process) = {
-      log.debug("Process {} terminated normally", process)
-    }
-    override def handleException(process: Process, t: Throwable) = {
-      log.warn("Process {} crashed with {}: {}", process, t.getClass.getSimpleName, t.getMessage)
+  /** Root Process */
+  private object RootProcessListener extends ProcessListener with LogNormalStopPL with LogKillPL with WarnCrashPL with WatcherSupportPL {
+    override def onStart(of: ProcessInternal) = {
+      log.debug("{} started", of)
     }
   }
+  
+  /** Monitored Child */
+  private class MonitoredChildProcessListener(val parent: ProcessInternal) extends ProcessListener 
+          with LogChildPL with LogKillPL with LogCrashPL 
+          with ParentAsWatcherPL with WatcherSupportPL 
+          with RemoveChildFromParentPL
+  
+  /** Required Child */
+  private class RequiredChildProcessListener(val parent: ProcessInternal) extends ProcessListener 
+          with LogChildPL with LogKillPL with WarnCrashPL 
+          with WatcherSupportPL with KillParentOnNonNormalPL 
+          with RemoveChildFromParentPL
+
+  /** Not Monitored Child */
+  private class NotMonitoredChildProcessListener(val parent: ProcessInternal) extends ProcessListener
+          with LogChildPL with LogKillPL with WarnCrashPL
+          with WatcherSupportPL
+          with RemoveChildFromParentPL
 
 
-  private case class ProcessState(process: ProcessImpl) {
+  private case class ProcessState(process: ProcessImpl, children: List[ProcessImpl]) {
     def messageBox = process.messageBox
   }
 
-
   private val IgnoreProcessResult = (res: Any, state: ProcessState) => ()
 
+  /**
+   * Implementation of a process.
+   */
   object ProcessImpl {
 
     def root(queue: ExecutionQueue, body: => Any @processCps): Process = {
-      new ProcessImpl(queue, RootProcessTerminationManager, body)
+      new ProcessImpl(queue, RootProcessListener, body)
     }
-    def child(parent: Process, childType: ChildType, queue: ExecutionQueue, body: => Any @processCps): Process = {
-      //TODO
-      null
+    def child(parent: ProcessInternal, childType: ChildType, queue: ExecutionQueue, body: => Any @processCps): Process = {
+      val tm = childType match {
+        case Monitored => new MonitoredChildProcessListener(parent)
+        case Required => new RequiredChildProcessListener(parent)
+        case NotMonitored => new NotMonitoredChildProcessListener(parent)
+      }
+      new ProcessImpl(queue, tm, body)
     }
 
     private val current = new ThreadLocal[Option[Process]] {
@@ -347,15 +509,15 @@ object ProcessCps extends Log {
   }
   private final val pidDealer = new java.util.concurrent.atomic.AtomicLong(0)
 
-  private class ProcessImpl(queue_org: ExecutionQueue, terminationManager: TerminationManager) extends Process {
-    def this(queue: ExecutionQueue, tm: TerminationManager, body: => Any @processCps) = {
-      this(queue, tm)
-      val toExecute = reset {
+  private class ProcessImpl(queue_org: ExecutionQueue, listener: ProcessListener) extends Process with ProcessInternal {
+    def this(queue: ExecutionQueue, listener: ProcessListener, body: => Any @processCps) = {
+      this(queue, listener)
+      val toExecute: ProcessAction[Any] = reset {
         firstFun.cps
         body
         lastFun
       }
-      toExecute.run(ProcessState(this), IgnoreProcessResult, flowHandler)
+      toExecute.run(ProcessState(this, Nil), IgnoreProcessResult, flowHandler)
     }
 
     val pid = pidDealer.incrementAndGet
@@ -373,32 +535,38 @@ object ProcessCps extends Log {
     }
     private[this] val flowHandler = new ProcessFlowHandler {
       override def step = {
-        //todo check for kill
+        //TODO check for kill
       }
-      override def exception(e: Throwable) = {
-        //TODO handle
+      override def exception(e: Throwable) = e match {
+//        case KillProcess(by, originalBy, reason) =>
+//          terminationManager.handleKill(ProcessImpl.this, by, originalBy, reason)
+        case e =>
+          listener.onException(ProcessImpl.this, e)
       }
       override def spawn(toexec: => Unit) = queue <-- toexec
     }
 
+    //TODO crashing parent must kill children
+
+    //TODO parent must maintain a list of its children (remove them on termination)
+
     private[this] def firstFun = new ProcessAction[Any] {
       override def run(state: ProcessState, continue: ContinueProcess[Any], flow: ProcessFlowHandler) {
-        log.debug("Started {}", external)
+        listener.onStart(ProcessImpl.this)
         continue((), state)
       }
     }
     private[this] def lastFun = new ProcessAction[Any] {
       override def run(state: ProcessState, continue: ContinueProcess[Any], flow: ProcessFlowHandler) {
         continue((), state)
-        //TODO termination logic
-        log.debug("Terminated {}", external)
+        listener.onNormalTermination(ProcessImpl.this)
       }
     }
 
     override def !(msg: Any) = messageBox.enqueue(msg)
 
     override def toString = "<Process-"+pid+">"
-    val external: Process = this //todo let gc collect us we don't have a 'internal' reference anymore
+    val external: Process = this //TODO let gc collect us we don't have a 'internal' reference anymore
   }
 
 
