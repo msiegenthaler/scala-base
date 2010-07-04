@@ -53,13 +53,13 @@ object ProcessCps extends Log {
   private type ContinueProcess[T] = Function2[T,ProcessState,Unit]
   private trait ProcessFlowHandler {
     /**
-     * Execute a step. Might throw an exception that should be passed to #exception.
+     * Execute a step. Might throw exceptions that must be presented to #exception()
      */
     def step(state: ProcessState): ProcessState
     /**
      * Handle an unhandled exception by the process. The process will not continue.
      */
-    def exception(e: Throwable): Unit
+    def exception(finalState: ProcessState, e: Throwable): Unit
     /**
      * Execute the 'toexec' in the same executor as the process runs. Must not be used
      * to start concurrent tasks but only to continue the execution of the process.
@@ -73,10 +73,28 @@ object ProcessCps extends Log {
   private class ChainedProcessAction[T,A](first: ProcessAction[T], second: T => ProcessAction[A]) extends ProcessAction[A] {
     override def run(state: ProcessState, continue: ContinueProcess[A], flow: ProcessFlowHandler) = {
       val contToFirst = (result: T, stateAfterFirst: ProcessState) => {
-        val secondAction = second(result)
-        secondAction.run(stateAfterFirst, continue, flow)
+        try {
+          val secondAction = second(result)
+          val stateAfterFirst2 = flow.step(stateAfterFirst)
+          try {
+            secondAction.run(stateAfterFirst2, continue, flow)
+          } catch {
+            case t => flow.exception(stateAfterFirst2, t)
+          }
+        } catch {
+          case t => flow.exception(stateAfterFirst, t)
+        }
       }
-      first.run(state, contToFirst, flow)
+      try {
+        val state2 = flow.step(state)
+        try {
+          first.run(state2, contToFirst, flow)
+        } catch { 
+          case t => flow.exception(state2, t)
+        }
+      } catch {
+        case t => flow.exception(state, t)
+      }
     }
   }
 
@@ -87,10 +105,14 @@ object ProcessCps extends Log {
     protected[this] def body(state: ProcessState, continue: ContinueProcess[T])
     private[ProcessCps] final def run(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler) = {
       try {
-        val s1 = flow.step(state)
-        body(s1, continue)
+        val state2 = flow.step(state)
+        try {
+          body(state2, continue)
+        } catch {
+          case t => flow.exception(state2, t) 
+        }
       } catch {
-        case t => flow.exception(t) 
+        case t => flow.exception(state, t)
       }
     }
   }
@@ -101,14 +123,19 @@ object ProcessCps extends Log {
   private trait NestingSupport[T] {
     protected[this] def execNested(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler)(result: => T @processCps): Unit = {
       val action: ProcessAction[Any] = reset {
+        noop
         val r: T = result
         new ValueProcessAction[Any](r)
       }
       try {
-        val s1 = flow.step(state)
-        action.run(s1, continue.asInstanceOf[ContinueProcess[Any]], flow)
+        val state2 = flow.step(state)
+        try {
+          action.run(state2, continue.asInstanceOf[ContinueProcess[Any]], flow)
+        } catch {
+          case t => flow.exception(state2, t)
+        }
       } catch {
-        case t => flow.exception(t)
+        case t => flow.exception(state, t)
       }
     }
   }
@@ -139,8 +166,7 @@ object ProcessCps extends Log {
     override def run(state: ProcessState, continue: ContinueProcess[Process], flow: ProcessFlowHandler) = {
       val me = state.process 
       val child = ProcessImpl.child(me, kind, executionQueue, body)
-      //TODO add to state?
-      continue(child, state)
+      continue(child, state.copy(children = child :: state.children))
     }
   }
 
@@ -257,32 +283,21 @@ object ProcessCps extends Log {
     }
   }
 
-
   /**
    * ProcessAction receiving a message matching a partial function.
    */
-  private class ReceiveProcessAction[T](fun: PartialFunction[Any,T @processCps]) extends ProcessAction[T] with NestingSupport[T] {
+  private class ReceiveProcessAction[T](fun: PartialFunction[Any,T @processCps]) extends ProcessAction[T] with ReceiveSupport[T] {
     override def run(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler) = {
-      val capture = new PartialFunction[Any,Unit] {
-        override def isDefinedAt(msg: Any) = fun.isDefinedAt(msg)
-        override def apply(msg: Any) = execNested(state, continue, flow) {
-          fun(msg)
-        }
-      }
+      val capture = createCapture(fun, state, continue, flow)
       state.messageBox.setCapture(capture)
     }
   }
   /**
    * ProcessAction receving a message matching a partial function within a certain timeframe.
    */
-  private class ReceiveWithinProcessAction[T](fun: PartialFunction[Any,T @processCps], timeout: Duration) extends ProcessAction[T] with NestingSupport[T] {
+  private class ReceiveWithinProcessAction[T](fun: PartialFunction[Any,T @processCps], timeout: Duration) extends ProcessAction[T] with ReceiveSupport[T] {
     override def run(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler) = {
-      val capture = new PartialFunction[Any,Unit] {
-        override def isDefinedAt(msg: Any) = fun.isDefinedAt(msg)
-        override def apply(msg: Any) = execNested(state, continue, flow) {
-          fun(msg)
-        }
-      }
+      val capture = createCapture(fun, state, continue, flow)
       val timeoutTask = new java.util.TimerTask {
         override def run = state.messageBox.cancelCapture { cap => 
           if (cap == capture) cap(Timeout)
@@ -292,21 +307,51 @@ object ProcessCps extends Log {
       timer.schedule(timeoutTask, timeout.amountAs(Milliseconds))
     }
   }
-  private val timer = new java.util.Timer(true)
-  private class ReceiveNoWaitProcessAction[T](fun: PartialFunction[Any,T @processCps]) extends ProcessAction[T] with NestingSupport[T] {
+  /**
+   * ProcessAction receiving a matching message if already present, else Timeout.
+   */
+  private class ReceiveNoWaitProcessAction[T](fun: PartialFunction[Any,T @processCps]) extends ProcessAction[T] with ReceiveSupport[T] {
     override def run(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler) = {
-      val capture = new PartialFunction[Any,Unit] {
-        override def isDefinedAt(msg: Any) = fun.isDefinedAt(msg)
-        override def apply(msg: Any) = execNested(state, continue, flow) {
-          fun(msg)
-        }
-      }
+      val capture = createCapture(fun, state, continue, flow)
       state.messageBox.setCapture(capture)
-      state.messageBox.cancelCapture { cap => 
+      state.messageBox.cancelCapture { cap =>
         if (cap == capture) cap(Timeout)
       }
     }
   }
+  /** common functions for all receive actions */
+  private trait ReceiveSupport[T] extends NestingSupport[T] {
+    protected[this] def createCapture(fun: PartialFunction[Any,T @processCps], state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler, alsoEquals: Option[Any] = None): PartialFunction[Any, Unit] = {
+      new PartialFunction[Any,Unit] {
+        override def isDefinedAt(msg: Any) = {
+          fun.isDefinedAt(msg) || msg==ManagementMessage
+        }
+        override def apply(msg: Any) = {
+          if (msg == ManagementMessage) {
+            try {
+              val state2 = flow.step(state)
+              try {
+                val capture = if (state2 == state) this
+                              else createCapture(fun, state2, continue, flow)
+                state2.messageBox.setCapture(capture)
+              } catch {
+                case t => flow.exception(state2, t)
+              }
+            } catch {
+              case t => flow.exception(state, t)
+            }
+          } else {
+            execNested(state, continue, flow) { fun(msg) }
+          }
+        }
+        override def equals(other: Any) = {
+          //Extended equals for matching of replaced captured (see receiveWithin)
+          other == this || (alsoEquals.isDefined && alsoEquals.get == other)
+        }
+      }
+    }
+  }
+  private val timer = new java.util.Timer(true)
 
   /**
    * Register us as a watcher to another process.
@@ -333,14 +378,14 @@ object ProcessCps extends Log {
     
     def removeChild(child: ProcessInternal): Unit
     /** Executes the action on every child of the process */
-    def foreachChild(action: ProcessInternal => Unit): Unit
+//    def foreachChild(action: ProcessInternal => Unit): Unit
 
     def addWatcher(watcher: Process): Unit
     def removeWatcher(watcher: Process): Unit
     /** Executes the action on every watcher of the process */
-    def foreachWatcher(action: Process => Unit): Unit
+//    def foreachWatcher(action: Process => Unit): Unit
     /** Executes the action on every process this process is watching */
-    def foreachWatched(action: ProcessInternal => Unit): Unit
+//    def foreachWatched(action: ProcessInternal => Unit): Unit
   }
   
   /**
@@ -348,22 +393,22 @@ object ProcessCps extends Log {
    */
   private trait ProcessListener {
     def onStart(of: ProcessInternal) = ()
-    def onNormalTermination(of: ProcessInternal) = ()
-    def onKill(of: ProcessInternal, by: ProcessInternal, originalBy: Process, reason: Throwable) = ()
-    def onException(in: ProcessInternal, cause: Throwable) = ()
+    def onNormalTermination(of: ProcessInternal, finalState: ProcessState) = ()
+    def onKill(of: ProcessInternal, finalState: ProcessState, by: ProcessInternal, originalBy: Process, reason: Throwable) = ()
+    def onException(in: ProcessInternal, finalState: ProcessState, cause: Throwable) = ()
   }
   
   /** Log the normal stop */
   private trait LogNormalStopPL extends ProcessListener {
-    override def onNormalTermination(of: ProcessInternal) = {
-      super.onNormalTermination(of)
+    override def onNormalTermination(of: ProcessInternal, finalState: ProcessState) = {
+      super.onNormalTermination(of, finalState)
       log.debug("{} has finished", of)
     }
   }
   /** Logs the killing of the process */
   private trait LogKillPL extends ProcessListener {
-    override def onKill(of: ProcessInternal, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
-      super.onKill(of, by, originalBy, reason)
+    override def onKill(of: ProcessInternal, finalState: ProcessState, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
+      super.onKill(of, finalState, by, originalBy, reason)
       if (by == originalBy) {
         log.info("{} was killed by {} due to {}: {}", of, by, reason.getClass.getSimpleName, reason.getMessage)
       } else {
@@ -373,34 +418,45 @@ object ProcessCps extends Log {
   }
   /** Logs a warning for unexpected crashing processes */
   private trait WarnCrashPL extends ProcessListener {
-    override def onException(in: ProcessInternal, cause: Throwable) = {
-      super.onException(in, cause)
+    override def onException(in: ProcessInternal, finalState: ProcessState, cause: Throwable) = {
+      super.onException(in, finalState, cause)
       log.warn("{} crashed with {}: {}", in, cause.getClass.getSimpleName, cause.getMessage)
     }
   }
   /** Logs expectedly crashing processes */
   private trait LogCrashPL extends ProcessListener {
-    override def onException(in: ProcessInternal, cause: Throwable) = {
-      super.onException(in, cause)
+    override def onException(in: ProcessInternal, finalState: ProcessState, cause: Throwable) = {
+      super.onException(in, finalState, cause)
       log.debug("{} crashed with {}: {}", in, cause.getClass.getSimpleName, cause.getMessage)
     }
   }
   /** Responsible for informing the watchers about this processes end */
   private trait WatcherSupportPL extends ProcessListener {
-    override def onNormalTermination(of: ProcessInternal) = {
-      super.onNormalTermination(of)
-      of.foreachWatched(_.removeWatcher(of))
-      of.foreachWatcher(_ ! ProcessExit(of))
+    override def onNormalTermination(of: ProcessInternal, finalState: ProcessState) = {
+      super.onNormalTermination(of, finalState)
+      finalState.watched.foreach(_.removeWatcher(of))
+      finalState.watchers.foreach(_ ! ProcessExit(of))
     }
-    override def onException(in: ProcessInternal, cause: Throwable) = {
-      super.onException(in, cause)
-      in.foreachWatched(_.removeWatcher(in))
-      in.foreachWatcher(_ ! ProcessCrash(in, cause))
+    override def onException(in: ProcessInternal, finalState: ProcessState, cause: Throwable) = {
+      super.onException(in, finalState, cause)
+      finalState.watched.foreach(_.removeWatcher(in))
+      finalState.watchers.foreach(_ ! ProcessCrash(in, cause))
     }
-    override def onKill(of: ProcessInternal, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
-      super.onKill(of, by, originalBy, reason)
-      of.foreachWatched(_.removeWatcher(of))
-      of.foreachWatcher(_ ! ProcessKill(of, by, reason))
+    override def onKill(of: ProcessInternal, finalState: ProcessState, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
+      super.onKill(of, finalState, by, originalBy, reason)
+      finalState.watched.foreach(_.removeWatcher(of))
+      finalState.watchers.foreach(_ ! ProcessKill(of, by, reason))
+    }
+  }
+  /** Kills the children if the process crashes */
+  private trait KillChildrenOnNonNormalPL extends ProcessListener {
+    override def onException(in: ProcessInternal, finalState: ProcessState, cause: Throwable) = {
+      super.onException(in, finalState, cause)
+      finalState.children.foreach(_.kill(in, in, cause))
+    }
+    override def onKill(of: ProcessInternal, finalState: ProcessState, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
+      super.onKill(of, finalState, by, originalBy, reason)
+      finalState.children.foreach(_.kill(of, originalBy, reason))
     }
   }
   /** Logs the start of a child */
@@ -414,50 +470,53 @@ object ProcessCps extends Log {
   /** Kills the parent process if the child crashes or is killed */
   private trait KillParentOnNonNormalPL extends ProcessListener {
     val parent: ProcessInternal
-    override def onException(in: ProcessInternal, cause: Throwable) = {
-      super.onException(in, cause)
+    override def onException(in: ProcessInternal, finalState: ProcessState, cause: Throwable) = {
+      super.onException(in, finalState, cause)
       parent.kill(in, in, cause)
     }
-    override def onKill(of: ProcessInternal, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
-      super.onKill(of, by, originalBy, reason)
+    override def onKill(of: ProcessInternal, finalState: ProcessState, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
+      super.onKill(of, finalState, by, originalBy, reason)
       if (by != parent) parent.kill(of, originalBy, reason)
     }
   }
   /** Sends ProcessEnd messages to the parent */
   private trait ParentAsWatcherPL extends ProcessListener {
     val parent: Process
-    override def onNormalTermination(of: ProcessInternal) = {
-      super.onNormalTermination(of)
+    override def onNormalTermination(of: ProcessInternal, finalState: ProcessState) = {
+      super.onNormalTermination(of, finalState)
       parent ! ProcessExit(of)
     }
-    override def onException(in: ProcessInternal, cause: Throwable) = {
-      super.onException(in, cause)
+    override def onException(in: ProcessInternal, finalState: ProcessState, cause: Throwable) = {
+      super.onException(in, finalState, cause)
       parent ! ProcessCrash(in, cause)
     }
-    override def onKill(of: ProcessInternal, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
-      super.onKill(of, by, originalBy, reason)
+    override def onKill(of: ProcessInternal, finalState: ProcessState, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
+      super.onKill(of, finalState, by, originalBy, reason)
       parent ! ProcessKill(of, by, reason)
     }
   }
   /** Removes the child from the parent on process ends (all) */
   private trait RemoveChildFromParentPL extends ProcessListener {
     val parent: ProcessInternal
-    override def onNormalTermination(of: ProcessInternal) = {
-      super.onNormalTermination(of)
+    override def onNormalTermination(of: ProcessInternal, finalState: ProcessState) = {
+      super.onNormalTermination(of, finalState)
       parent.removeChild(of)
     }
-    override def onException(in: ProcessInternal, cause: Throwable) = {
-      super.onException(in, cause)
+    override def onException(in: ProcessInternal, finalState: ProcessState, cause: Throwable) = {
+      super.onException(in, finalState, cause)
       parent.removeChild(in)
     }
-    override def onKill(of: ProcessInternal, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
-      super.onKill(of, by, originalBy, reason)
+    override def onKill(of: ProcessInternal, finalState: ProcessState, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
+      super.onKill(of, finalState, by, originalBy, reason)
       parent.removeChild(of)
     }
   }
 
+
   /** Root Process */
-  private object RootProcessListener extends ProcessListener with LogNormalStopPL with LogKillPL with WarnCrashPL with WatcherSupportPL {
+  private object RootProcessListener extends ProcessListener 
+          with LogNormalStopPL with LogKillPL with WarnCrashPL
+          with WatcherSupportPL with KillChildrenOnNonNormalPL {
     override def onStart(of: ProcessInternal) = {
       log.debug("{} started", of)
     }
@@ -465,21 +524,21 @@ object ProcessCps extends Log {
   
   /** Monitored Child */
   private class MonitoredChildProcessListener(val parent: ProcessInternal) extends ProcessListener 
-          with LogChildPL with LogKillPL with LogCrashPL 
-          with ParentAsWatcherPL with WatcherSupportPL 
-          with RemoveChildFromParentPL
+          with LogChildPL with LogNormalStopPL with LogKillPL with LogCrashPL 
+          with WatcherSupportPL 
+          with ParentAsWatcherPL with RemoveChildFromParentPL with KillChildrenOnNonNormalPL
   
   /** Required Child */
   private class RequiredChildProcessListener(val parent: ProcessInternal) extends ProcessListener 
-          with LogChildPL with LogKillPL with WarnCrashPL 
-          with WatcherSupportPL with KillParentOnNonNormalPL 
-          with RemoveChildFromParentPL
+          with LogChildPL with LogNormalStopPL with LogKillPL with WarnCrashPL 
+          with WatcherSupportPL
+          with RemoveChildFromParentPL with KillParentOnNonNormalPL with KillChildrenOnNonNormalPL 
 
   /** Not Monitored Child */
   private class NotMonitoredChildProcessListener(val parent: ProcessInternal) extends ProcessListener
-          with LogChildPL with LogKillPL with WarnCrashPL
+          with LogChildPL with LogNormalStopPL with LogKillPL with WarnCrashPL
           with WatcherSupportPL
-          with RemoveChildFromParentPL
+          with RemoveChildFromParentPL with KillChildrenOnNonNormalPL
 
 
   /**
@@ -494,12 +553,12 @@ object ProcessCps extends Log {
   /**
    * Implementation of a process.
    */
-  object ProcessImpl {
+  private object ProcessImpl {
 
-    def root(queue: ExecutionQueue, body: => Any @processCps): Process = {
+    def root(queue: ExecutionQueue, body: => Any @processCps): ProcessInternal = {
       new ProcessImpl(queue, RootProcessListener, body)
     }
-    def child(parent: ProcessInternal, childType: ChildType, queue: ExecutionQueue, body: => Any @processCps): Process = {
+    def child(parent: ProcessInternal, childType: ChildType, queue: ExecutionQueue, body: => Any @processCps): ProcessInternal = {
       val tm = childType match {
         case Monitored => new MonitoredChildProcessListener(parent)
         case Required => new RequiredChildProcessListener(parent)
@@ -559,11 +618,13 @@ object ProcessCps extends Log {
             s2
         }
       }
-      override def exception(e: Throwable) = e match {
+      override def exception(finalState: ProcessState, e: Throwable) = e match {
         case KillTheProcess(by, originalBy, reason) =>
-          listener.onKill(ProcessImpl.this, by, originalBy, reason)
+          log.trace("{} killed, notifying listeners ({})", external, reason)
+          listener.onKill(ProcessImpl.this, finalState, by, originalBy, reason)
         case e =>
-          listener.onException(ProcessImpl.this, e)
+          log.trace("{} threw exception {}: {}", external, e.getClass.getSimpleName, e.getMessage)
+          listener.onException(ProcessImpl.this, finalState, e)
       }
       override def spawn(toexec: => Unit) = {
         queue <-- toexec
@@ -578,42 +639,36 @@ object ProcessCps extends Log {
     }
     private[this] def lastFun = new ProcessAction[Any] {
       override def run(state: ProcessState, continue: ContinueProcess[Any], flow: ProcessFlowHandler) {
-        continue((), state)
-        listener.onNormalTermination(ProcessImpl.this)
+        continue((), state) // TODO this is a no-op, can we remove that?
+        listener.onNormalTermination(ProcessImpl.this, state)
       }
     }
 
     override def kill(killer: ProcessInternal, originalKiller: Process, reason: Throwable) = mgmtStep { state =>
-      throw new KillTheProcess(killer, originalKiller, reason)
-    }
-    override def foreachChild(action: ProcessInternal => Unit) = mgmtStep { state =>
-      state.children.foreach(action(_))
-      state
+      log.trace("{} is killed ({})...", external, reason)
+      throw KillTheProcess(killer, originalKiller, reason)
     }
     override def removeChild(child: ProcessInternal) = mgmtStep { state =>
+      log.trace("{} remove child {}", external, child)
       val nc = state.children.filterNot(_ == child)
       state.copy(children = nc)
     }
-    override def foreachWatcher(action: Process => Unit) = mgmtStep { state =>
-      state.watchers.foreach(action(_))
-      state
-    }
     override def addWatcher(watcher: Process) = mgmtStep { state =>
+      log.trace("{} add watcher {}", external, watcher)
       state.copy(watchers = watcher :: state.watchers)
     }
     override def removeWatcher(watcher: Process) = mgmtStep { state =>
+      log.trace("{} remove watcher {}", external, watcher)
       val nw = state.watchers.filterNot(_ == watcher)
       state.copy(watchers = nw)
-    }
-    override def foreachWatched(action: ProcessInternal => Unit) = mgmtStep { state =>
-      state.watched.foreach(action(_))
-      state
     }
 
     private[this] def mgmtStep(action: ProcessState => ProcessState): Unit = {
       val steps = mgmtSteps.get
       if (!mgmtSteps.compareAndSet(steps, action :: steps))
         mgmtStep(action)  //try again
+      else 
+        this ! ManagementMessage //trigger a step if within a receive
     }
 
     override def !(msg: Any) = messageBox.enqueue(msg)
@@ -622,6 +677,9 @@ object ProcessCps extends Log {
 
     val external: Process = this //TODO let gc collect us we don't have a 'internal' reference anymore
   }
+
   private case class KillTheProcess(by: ProcessInternal, originalBy: Process, reason: Throwable) extends Exception(reason)
+  private object ManagementMessage
 
 }
+

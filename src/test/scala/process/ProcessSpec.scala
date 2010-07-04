@@ -9,6 +9,7 @@ import ch.inventsoft.scalabase.time._
 class ProcessTest extends ProcessSpec with ShouldMatchers {
   
   describe("Process") {
+/*
     describe("spawn") {
       it_("should execute a simple operation when spawned") {
         val s = new SyncVar[Boolean] 
@@ -52,7 +53,6 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         s.get(1000) should be(Some(true))
       }      
     }
-    
     ///////////////////////////////
     // Receive
     ///////////////////////////////
@@ -288,11 +288,12 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         s.get(1000) should be(Some("100"))
       }
     }
-    
+    */
+
     ///////////////////////////////
     // Monitoring
     ///////////////////////////////
-    describe("monitoring") {
+    describe("monitoring") { /*
       it_("should send a message to the parent if a Monitored child exits normally") {
         val s = new SyncVar[String]
         val p = spawn {
@@ -325,7 +326,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         }
         s.get(1000) should be(Some("oO"))
       }
-      
+
       it_("should not send a message to the paret if a NotMonitoredChild exits normally") {
         val s = new SyncVar[String]
         val p = spawn {
@@ -375,14 +376,15 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
           }
           s1.set("letting it crash")
           c ! "ok, go crashing"
-          receiveWithin(1 s) {
+          receiveWithin(2 s) {
             case Timeout =>
               s2.set("failed because not killed")
           }
         }
-        s1.get(2000) should be(Some("letting it crash"))
-        s2.get(2000) should be(None)
+        s1.get(3000) should be(Some("letting it crash"))
+        s2.get(3000) should be(None)
       }
+*/
       it_("should crash the parent and the peers if a Required child crashes") {
         val s1 = new SyncVar[String]
         val s2 = new SyncVar[String]
@@ -423,6 +425,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         s2.get(2000) should be(None)
         s4.get(2000) should be(None)
       }
+/*
       it_("should not affect the parent if a Required child exits normally") {
         val s = new SyncVar[String]
         spawn {
@@ -479,7 +482,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         s3.get(2000) should be(None)
         s4.get(4000) should be(Some("ok"))
       }
-      
+
       it_("should be possible to watch a process and receive notification about a normal exit") {
         val s = new SyncVar[String]
         val p = spawn {
@@ -666,8 +669,9 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         s.get(1000) should be(Some("Hi there"))
         s2.get(1000) should be(Some("ok"))
       }
+*/
     }
-    
+        /*
     ///////////////////////////////
     // Performance
     ///////////////////////////////
@@ -880,12 +884,14 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         val mem = Runtime.getRuntime.totalMemory - Runtime.getRuntime.freeMemory - mem0
         val bytesPerProcess = mem / count //includes list 'ps'
         println("Running "+count+" processes with <"+(mem/1048576)+"Mb used (<"+bytesPerProcess+" bytes per process)")
-        if (bytesPerProcess > 3000) fail("Too much memory uesed per process: "+bytesPerProcess+" bytes")
+        if (bytesPerProcess > 3000) fail("Too much memory used per process: "+bytesPerProcess+" bytes")
         //Stopping
         ps.foreach(p => p ! Exit)
       }
     }
+  */
   }
+
   
   protected val warmups = 1000
   protected def time(desc: String, count: Int, warmupCount: Int = warmups)(f: => Unit, after: => Unit = ()) = {
