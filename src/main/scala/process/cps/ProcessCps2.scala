@@ -299,11 +299,14 @@ object ProcessCps extends Log {
     override def run(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler) = {
       val capture = createCapture(fun, state, continue, flow)
       val timeoutTask = new java.util.TimerTask {
-        override def run = state.messageBox.cancelCapture { cap => 
+        override def run = state.messageBox.cancelCapture { cap =>
           if (cap == capture) cap(Timeout)
         }
       }
-      state.messageBox.setCapture(capture)
+      state.messageBox.setCapture(capture.andBefore { msg =>
+        timeoutTask.cancel // got a msg before the timeout triggered, so cancel the timeout
+        msg
+      })
       timer.schedule(timeoutTask, timeout.amountAs(Milliseconds))
     }
   }
@@ -321,36 +324,49 @@ object ProcessCps extends Log {
   }
   /** common functions for all receive actions */
   private trait ReceiveSupport[T] extends NestingSupport[T] {
-    protected[this] def createCapture(fun: PartialFunction[Any,T @processCps], state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler, alsoEquals: Option[Any] = None): PartialFunction[Any, Unit] = {
-      new PartialFunction[Any,Unit] {
-        override def isDefinedAt(msg: Any) = {
-          fun.isDefinedAt(msg) || msg==ManagementMessage
-        }
-        override def apply(msg: Any) = {
-          if (msg == ManagementMessage) {
-            try {
-              val state2 = flow.step(state)
-              try {
-                val capture = if (state2 == state) this
-                              else createCapture(fun, state2, continue, flow)
-                state2.messageBox.setCapture(capture)
-              } catch {
-                case t => flow.exception(state2, t)
+    protected[this] def createCapture(fun: PartialFunction[Any,T @processCps], state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler): CaptureFun = {
+      new CaptureFun(state, flow, fun.isDefinedAt _, (state, msg) => {
+        execNested(state, continue, flow) { fun(msg) }
+      })
+    }
+  }
+  private class CaptureFun(state: ProcessState, flow: ProcessFlowHandler, matcher: Any => Boolean, fun: (ProcessState, Any) => Unit) extends PartialFunction[Any,Unit] {
+    override def isDefinedAt(msg: Any) = {
+      matcher(msg) || msg == ManagementMessage
+    }
+    override def apply(msg: Any) = {
+      if (msg == ManagementMessage) processManagementMessage
+      else fun(state, msg)
+    }
+    protected[this] def processManagementMessage = {
+      try {
+        val state2 = flow.step(state)
+        try {
+          val capture = {
+            if (state2 == state) this
+            else {
+              val me = this
+              new CaptureFun(state2, flow, matcher, fun) with Proxy {
+                override val self = me
               }
-            } catch {
-              case t => flow.exception(state, t)
             }
-          } else {
-            execNested(state, continue, flow) { fun(msg) }
           }
+          state2.messageBox.setCapture(capture)
+        } catch {
+          case t => flow.exception(state2, t)
         }
-        override def equals(other: Any) = {
-          //Extended equals for matching of replaced captured (see receiveWithin)
-          other == this || (alsoEquals.isDefined && alsoEquals.get == other)
-        }
+      } catch {
+        case t => flow.exception(state, t)
+      }
+    }
+    def andBefore(exec: Any => Any) = {
+      val me = this
+      new CaptureFun(state, flow, matcher, (state, msg) => fun(state, exec(msg))) with Proxy {
+        override val self = me
       }
     }
   }
+
   private val timer = new java.util.Timer(true)
 
   /**
@@ -375,17 +391,9 @@ object ProcessCps extends Log {
   private trait ProcessInternal extends Process {
     /** Forcefully stop the process on the next possible location */
     def kill(killer: ProcessInternal, originalKiller: Process, reason: Throwable): Unit
-    
     def removeChild(child: ProcessInternal): Unit
-    /** Executes the action on every child of the process */
-//    def foreachChild(action: ProcessInternal => Unit): Unit
-
     def addWatcher(watcher: Process): Unit
     def removeWatcher(watcher: Process): Unit
-    /** Executes the action on every watcher of the process */
-//    def foreachWatcher(action: Process => Unit): Unit
-    /** Executes the action on every process this process is watching */
-//    def foreachWatched(action: ProcessInternal => Unit): Unit
   }
   
   /**
@@ -588,6 +596,7 @@ object ProcessCps extends Log {
     val pid = pidDealer.incrementAndGet
     //TODO this is very slow, use something more efficient or find a different solution for this
     // 'unsafe' feature
+/*
     val queue = new ExecutionQueue {
       private[this] val me = Some(ProcessImpl.this)
       override def execute(f: => Unit) = queue_org <-- {
@@ -599,7 +608,7 @@ object ProcessCps extends Log {
         }
       }
     }
-//    val queue = queue_org
+*/    val queue = queue_org
     val messageBox: MessageBox[Any] = new MessageBox[Any](queue)
     private[this] val mgmtSteps = new java.util.concurrent.atomic.AtomicReference[List[ProcessState => ProcessState]](Nil)
     private[this] val flowHandler = new ProcessFlowHandler {

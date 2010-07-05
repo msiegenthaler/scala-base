@@ -13,7 +13,7 @@ object RingPerformance extends Log {
   def main(args: Array[String]) = {
     warmup
     log.info("Starting...")
-    runTestWith(100, 1000000)
+    runTestWith(100, 100000)
   }
   
   def warmup = {

@@ -9,7 +9,6 @@ import ch.inventsoft.scalabase.time._
 class ProcessTest extends ProcessSpec with ShouldMatchers {
   
   describe("Process") {
-/*
     describe("spawn") {
       it_("should execute a simple operation when spawned") {
         val s = new SyncVar[Boolean] 
@@ -288,12 +287,11 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         s.get(1000) should be(Some("100"))
       }
     }
-    */
 
     ///////////////////////////////
     // Monitoring
     ///////////////////////////////
-    describe("monitoring") { /*
+    describe("monitoring") {
       it_("should send a message to the parent if a Monitored child exits normally") {
         val s = new SyncVar[String]
         val p = spawn {
@@ -384,7 +382,6 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         s1.get(3000) should be(Some("letting it crash"))
         s2.get(3000) should be(None)
       }
-*/
       it_("should crash the parent and the peers if a Required child crashes") {
         val s1 = new SyncVar[String]
         val s2 = new SyncVar[String]
@@ -425,7 +422,6 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         s2.get(2000) should be(None)
         s4.get(2000) should be(None)
       }
-/*
       it_("should not affect the parent if a Required child exits normally") {
         val s = new SyncVar[String]
         spawn {
@@ -442,7 +438,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
             case any => s.set("Fail: "+any)
           }
         }
-        s.get(20000) should be(Some("ok"))
+        s.get(3000) should be(Some("ok"))
       }
       it_("should notify the monitored parents parent if a Required child crashes the parent") {
         val s1 = new SyncVar[String]
@@ -669,7 +665,6 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         s.get(1000) should be(Some("Hi there"))
         s2.get(1000) should be(Some("ok"))
       }
-*/
     }
         /*
     ///////////////////////////////

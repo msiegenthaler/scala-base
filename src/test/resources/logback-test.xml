@@ -6,8 +6,9 @@
   </appender>
 
   <logger name="ch.inventsoft.scalabase" level="info"/>
-  <logger name="ch.inventsoft.scalabase.oip" level="trace"/>
-  <logger name="ch.inventsoft.scalabase.process" level="trace"/>
+  <logger name="ch.inventsoft.scalabase.oip" level="info"/>
+  <logger name="ch.inventsoft.scalabase.process" level="warn"/>
+  <logger name="ch.inventsoft.scalabase.process.cps" level="info"/>
 	
   <root level="warn">
     <appender-ref ref="STDOUT" />
