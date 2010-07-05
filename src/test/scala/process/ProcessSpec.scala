@@ -478,7 +478,6 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         s3.get(2000) should be(None)
         s4.get(4000) should be(Some("ok"))
       }
-
       it_("should be possible to watch a process and receive notification about a normal exit") {
         val s = new SyncVar[String]
         val p = spawn {

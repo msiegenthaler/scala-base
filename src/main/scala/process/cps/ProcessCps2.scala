@@ -123,10 +123,14 @@ object ProcessCps extends Log {
   private trait NestingSupport[T] {
     protected[this] def execNested(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler)(result: => T @processCps): Unit = {
       val action: ProcessAction[Any] = reset {
-        noop
-        val r: T = result
-        new ValueProcessAction[Any](r)
+        try {
+          val r = result
+          new ValueProcessAction[Any](r)
+        } catch {
+          case x => new ExceptionProcessAction(x)
+        }
       }
+
       try {
         val state2 = flow.step(state)
         try {
@@ -148,6 +152,17 @@ object ProcessCps extends Log {
       continue(value, state)
     }
   }
+  /**
+   * ProcessAction representing an exception
+   */
+  private class ExceptionProcessAction(exception: Throwable) extends ProcessAction[Any] {
+    override def run(state: ProcessState, continue: ContinueProcess[Any], flow: ProcessFlowHandler) = {
+      flow.exception(state, exception)
+    }
+  }
+  /**
+   * Action that does nothing and returns Unit
+   */
   private object NoopAction extends ValueProcessAction(())
   
   /**
