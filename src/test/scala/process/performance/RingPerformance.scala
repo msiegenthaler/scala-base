@@ -1,7 +1,6 @@
-package ch.inventsoft.scalabase.process.actor
+package ch.inventsoft.scalabase.process.performance
 
-import scala.actors._
-import Actor._
+import ch.inventsoft.scalabase.process._
 import ch.inventsoft.scalabase.time._
 import ch.inventsoft.scalabase.log._
 
@@ -9,12 +8,12 @@ import ch.inventsoft.scalabase.log._
  * Compare this implementation to other implementations (erlang, scala actors).
  * see http://tech.puredanger.com/2009/01/05/scala-ring/
  */
-object ActorRingPerformance extends Log {
+object RingPerformance extends Log {
   
   def main(args: Array[String]) = {
     warmup
     log.info("Starting...")
-    runTestWith(100, 1000000)
+    runTestWith(100, 100000)
   }
   
   def warmup = {
@@ -64,8 +63,8 @@ object ActorRingPerformance extends Log {
     result
   }
   
-  def connectNodes(nodes: List[Actor]) = {
-    def connect(firstNode: Actor, remaining: List[Actor]): Unit = remaining match {
+  def connectNodes(nodes: List[Process]) = {
+    def connect(firstNode: Process, remaining: List[Process]): Unit = remaining match {
       case a :: b :: tail =>
         a ! SetNextNode(b)
         connect(firstNode, b :: tail)
@@ -84,8 +83,8 @@ object ActorRingPerformance extends Log {
   }
   
   
-  def startNode(nodeId: Int, timer: Actor, messageWasSentAroundRing: Int => Boolean): Actor = actor {
-    def run(next: Actor): Unit = {
+  def startNode(nodeId: Int, timer: Process, messageWasSentAroundRing: Int => Boolean): Process = spawn {
+    def run(next: Process): Unit @processCps = {
       val cont = receive {
         case msg @ StartMessage =>
           timer ! msg
@@ -107,6 +106,7 @@ object ActorRingPerformance extends Log {
           true
       }
       if (cont) run(next)
+      else noop
     }
     val next = receive {
       case SetNextNode(next) =>
@@ -115,8 +115,8 @@ object ActorRingPerformance extends Log {
     run(next)
   }
   
-  def startTimer(reportTo: Duration => Unit): Actor = actor {
-    def timing(t0: Long): Boolean = receive {
+  def startTimer(reportTo: Duration => Unit): Process = spawn {
+    def timing(t0: Long): Boolean @processCps = receive {
       case StopMessage =>
         val duration = System.nanoTime - t0
         reportTo(duration ns)
@@ -125,17 +125,20 @@ object ActorRingPerformance extends Log {
         log.warn("Ignored message in timer-before: "+msg)
         true
     }
-    def before: Unit = receive {
+    def before: Unit @processCps = receive {
       case StartMessage =>
         if (timing(System.nanoTime)) before
+        else noop
       case msg => log.warn("Ignored message in timer-before: "+msg)
     }
     before
   }
 
   
-  case class SetNextNode(next: Actor)
+  case class SetNextNode(next: Process)
   case object StartMessage
   case object StopMessage
   case class TokenMessage(id: Int, value: Int)
+
+  
 }

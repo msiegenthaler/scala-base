@@ -665,7 +665,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         s2.get(1000) should be(Some("ok"))
       }
     }
-        /*
+
     ///////////////////////////////
     // Performance
     ///////////////////////////////
@@ -883,7 +883,6 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         ps.foreach(p => p ! Exit)
       }
     }
-  */
   }
 
   
