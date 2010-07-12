@@ -10,24 +10,37 @@ import ch.inventsoft.scalabase.time._
  */
 object ProcessLargeBufferPerformance extends Log {
   def main(args: Array[String]) = {
-    val buffer = 10000
-    val rounds = 10
+    val buffer = 1000
+    val rounds = 200
 
     //warmup
     log.info("Warming up")
-    runRepeated((rounds/10) min 100 max 5, buffer)
+    runRepeated(200, 1000)
+    runRepeated(2, 10000)
+    runRepeated(200, 1000)
 
     //execute
-    log.info("Executing performance test...")
-    val (duration,msgs) =  runRepeated(rounds, buffer)
+    log.info("Executing performance tests...")
+    log.info("Medium sized (100 msgs)")
+    val (duration100,msgs100) =  runRepeated(1000, 100)
+    log.info("Large (1000 msgs)")
+    val (duration1k,msgs1k) = runRepeated(500, 1000)
+    log.info("Very large (10000 msgs)")
+    val (duration10k,msgs10k) = runRepeated(10, 10000)
     log.info("done.")
 
-    log.info("It took {} to receive {} msgs (in-order)", duration.as(Seconds), msgs)
+    val duration = duration100 + duration1k + duration10k
+    val msgs = msgs100 + msgs1k + msgs10k
+    log.info("Total duration was {} seconds for {} msgs", duration.as(Seconds), msgs)
     log.info(" - {} per message", duration / msgs)
-    val mps = (1 s) / (duration / msgs)
-    log.info(" - messages per second: {}", mps)
+    log.info(" - messages per second: {}", mps(duration,msgs))
+    log.info("   - {} mps for 100 msgs in queue", mps(duration100,msgs100))
+    log.info("   - {} mps for 1k msgs in queue", mps(duration1k,msgs1k))
+    log.info("   - {} mps for 10k msgs in queue", mps(duration10k,msgs10k))
     log.info("done.")
   }
+
+  def mps(duration: Duration, msgs: Int) = (1 s) / (duration / msgs)
 
   def run(msgCount: Int) = {
     log.trace("Spawning  processes")

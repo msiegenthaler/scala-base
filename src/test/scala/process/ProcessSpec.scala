@@ -3,6 +3,7 @@ package ch.inventsoft.scalabase.process
 import org.scalatest._
 import matchers._
 import ch.inventsoft.scalabase.process._
+import ch.inventsoft.scalabase.process.cps.CpsUtils._
 import scala.concurrent.SyncVar
 import ch.inventsoft.scalabase.time._
 
@@ -123,7 +124,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         s1.get(1000) should be (Some("Hi"))
         s2.get(1000) should be (Some("Ho!"))
       }
-      it_("should be possible to receive three messages in sequence") {
+      it_("should be possible to receive three messages in sequence") { (1 to 100).foreach_cps { i =>
         val s1 = new SyncVar[String]
         val s2 = new SyncVar[String]
         val s3 = new SyncVar[String]
@@ -144,7 +145,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         s1.get(1000) should be (Some("Hi"))
         s2.get(1000) should be (Some("Ho!"))
         s3.get(1000) should be (Some("Ha"))
-      }
+      }}
       it_("should be possible to receive two messages nested") {
         val s1 = new SyncVar[String]
         val s2 = new SyncVar[String]
@@ -669,6 +670,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
     ///////////////////////////////
     // Performance
     ///////////////////////////////
+    /*
     describe("performance") {
       it_("should be possible to start at least 10000 concurrent processes") {
         val c = (1 to 10000)
@@ -883,6 +885,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         ps.foreach(p => p ! Exit)
       }
     }
+  */
   }
 
   
