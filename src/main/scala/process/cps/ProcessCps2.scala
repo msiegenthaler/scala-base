@@ -8,7 +8,7 @@ import ch.inventsoft.scalabase.process._
 import ExecutionQueues._
 
 
-object ProcessCps extends Log {
+object ProcessCps extends Log with MessageBoxContainer[Any] {
 
   def spawnProcess(executionQueue: ExecutionQueue)(body: => Any @processCps): Process = {
     ProcessImpl.root(executionQueue, body)
@@ -182,233 +182,6 @@ object ProcessCps extends Log {
       val me = state.process 
       val child = ProcessImpl.child(me, kind, executionQueue, body)
       continue(child, state.copy(children = child :: state.children))
-    }
-  }
-
-  /**
-   * Message box for many senders and a single consumer.
-   */
-  private class MessageBox[T](checkExec: ExecutionQueue) extends Log {
-    import java.util.concurrent.atomic._
-    import ch.inventsoft.scalabase.extcol.ListUtil._
-    type Capture = PartialFunction[T,Unit]
-    type Cancel = Capture => Unit
-
-    private[this] trait Captures {
-      def add(capture: Capture): Captures
-      def add(cancel: Cancel): Captures
-      def apply(old: Option[Capture]): (Option[Capture],Option[Cancel])
-      def resultsInCapture(current: Boolean): Boolean
-    }
-    private[this] object Captures0 extends Captures {
-      override def add(capture: Capture) = new Captures1A(capture)
-      override def add(cancel: Cancel) = new Captures1R(cancel)
-      override def apply(old: Option[Capture]) = (old, None)
-      override def resultsInCapture(current: Boolean) = current
-    }
-    private[this] class Captures1A(capture: Capture) extends Captures {
-      override def add(captureNew: Capture) =
-        throw new IllegalStateException("Already a capture registered (A)")
-      override def add(cancel: Cancel) =
-        new Captures2AR(capture, cancel)
-      override def apply(old: Option[Capture]) = {
-        if (old.isDefined)
-          throw new IllegalStateException("Uncancelled capture (A)")
-        (Some(capture),None)
-      }
-      override def resultsInCapture(current: Boolean) = true
-    }
-    private[this] class Captures1R(cancel: Cancel) extends Captures {
-      override def add(capture: Capture) =
-        throw new IllegalStateException("Processing continued before cancel was executed")
-      override def add(cancelNew: Cancel) =
-        throw new IllegalStateException("Already a cancel registerd (R)")
-      override def apply(old: Option[Capture]) = {
-        old.foreach(cancel(_))
-        (None, None)
-      }
-      override def resultsInCapture(current: Boolean) = false
-    }
-    private[this] class Captures2AR(capture: Capture, cancel: Cancel) extends Captures {
-      override def add(captureNew: Capture) = {
-        cancel(capture)
-        new Captures1A(captureNew)
-      }
-      override def add(cancelNew: Cancel) =
-        throw new IllegalStateException("Already a cancel registerd (AR)")
-      override def apply(old: Option[Capture]) = {
-        if (old.isDefined)
-          throw new IllegalStateException("Uncancelled capture (AR)")
-        (Some(capture),Some(cancel))
-      }
-      override def resultsInCapture(current: Boolean) = false
-    }
-
-    private[this] case class Actions(in: List[T], captures: Captures, checkerRunning: Boolean, hasMsgs: Boolean, hasCapture: Boolean)
-    private[this] object ActionsRMC extends Actions (Nil, Captures0, true, true, true)
-    private[this] object ActionsRfC extends Actions (Nil, Captures0, true, false, true)
-    private[this] object ActionsRMf extends Actions (Nil, Captures0, true, true, false)
-    private[this] object ActionsRff extends Actions (Nil, Captures0, true, false, false)
-    private[this] object ActionsfMC extends Actions (Nil, Captures0, false, true, true)
-    private[this] object ActionsffC extends Actions (Nil, Captures0, false, false, true)
-    private[this] object ActionsfMf extends Actions (Nil, Captures0, false, true, false)
-    private[this] object Actionsfff extends Actions (Nil, Captures0, false, false, false)
-
-    private[this] case class State(msgs: List[T], capture: Option[Capture])
-
-
-    //Actions to execute. Modified and read by all threads
-    private[this] val pending = new AtomicReference[Actions](Actions(Nil, Captures0, false, false, false))
-    //State of the message box. Only accessed by the checker-threads (not-concurrent)
-    @volatile private[this] var state = State(Nil, None)
-
-    /**
-     * Enqueue a new message.
-     * Does complete fast, does never block. The amount of code executed in the caller thread
-     * is minimal. No capture check is done in this thread.
-     */
-    def enqueue(msg: T): Unit = {
-      val actions = pending.get
-      val msgs = msg :: actions.in
-      if (actions.checkerRunning || !actions.hasCapture) {
-        val na = actions.copy(in=msgs, hasMsgs=true)
-        if (!pending.compareAndSet(actions, na)) enqueue(msg) // retry
-      } else {
-        val na = actions.copy(in=msgs, hasMsgs=true, checkerRunning=true)
-        if (pending.compareAndSet(actions, na)) checkExec <-- check
-        else enqueue(msg) //retry
-      }
-    }
-
-    /**
-     * Register a new capture for the message box.
-     */
-    def setCapture(capture: Capture): Unit = {
-      val actions = pending.get
-      val ncs = actions.captures.add(capture)
-      if (actions.checkerRunning || !actions.hasMsgs) {
-        val na = actions.copy(captures=ncs, hasCapture=true)
-        if (!pending.compareAndSet(actions, na)) setCapture(capture) //retry
-      } else {
-        val na = actions.copy(captures=ncs, hasCapture=true, checkerRunning=true)
-        if (pending.compareAndSet(actions, na)) checkExec <-- check 
-        else setCapture(capture) //retry
-      }
-    }
-    /**
-     * Cancel the currently registered capture.
-     * The 'cancel' will be called with the deregistered capture. If no capture is registered
-     * then this method is a no-op, 'cancel' will not be called.
-     */
-    def cancelCapture(cancel: Cancel): Unit = {
-      val actions = pending.get
-      val ncs = actions.captures.add(cancel)
-      if (actions.checkerRunning || !actions.hasCapture) {
-        val na = actions.copy(captures=ncs, hasCapture=false)
-        if (!pending.compareAndSet(actions, na)) cancelCapture(cancel) //retry
-      } else {
-        val na = actions.copy(captures=ncs, hasCapture=false, checkerRunning=true)
-        if (pending.compareAndSet(actions, na)) checkExec <-- check 
-        else cancelCapture(cancel) //retry
-      }
-    }
-
-    /**
-     * Guarantees:
-     * - only active once ('synchronized') and only in the checkExec queue
-     * - sees every msg without external delay
-     */
-    private[this] def check = {
-      def process(s: State): Unit = {
-        val actions = pending.get
-
-        val runningAction = {
-          if (actions.in.nonEmpty || s.msgs.nonEmpty) {
-            if (actions.captures.resultsInCapture(s.capture.isDefined)) ActionsRMC
-            else ActionsRMf
-          } else {
-            if (actions.captures.resultsInCapture(s.capture.isDefined)) ActionsRfC
-            else ActionsRff
-          }
-        }
-
-        //Confirm that we received the action..
-        if (!pending.compareAndSet(actions, runningAction)) process(s)
-        else {
-          val (capture, deferredCancel) = actions.captures(s.capture)
-
-          //try to apply the capture and merge the action-msgs into the state
-          val s2 = processMsgs(s, capture, deferredCancel, actions.in.reverse)
-
-          // need to do that before cas, because everything after cas might overlap with next invocation
-          state = s2 
-
-          val notRunningAction = {
-            if (s2.msgs.nonEmpty) {
-              if (s2.capture.isDefined) ActionsfMC
-              else ActionsfMf
-            } else {
-              if (s2.capture.isDefined) ActionsffC
-              else Actionsfff
-            }
-          }
-
-          //See if we can terminate..
-          if (!pending.compareAndSet(runningAction, notRunningAction)) {
-            // new messages/captures arrived, so we need to rerun ourselves
-            process(s2)
-          }
-        }
-      }
-      process(state)
-    }
-
-
-    /**
-     * Process messages and apply the captures.
-     * @param s current state
-     * @param capture the capture to apply (new/ols capture)
-     * @param actionMsgs new messages
-     * @return new state
-     */
-    private[this] def processMsgs(s: State, capture: Option[Capture], deferredCancel: Option[Cancel], actionMsgs: List[T]): State = capture match {
-      case c @ Some(capture) =>
-        if (s.capture == capture) {
-          //only check the new msgs
-          removeFirst(actionMsgs, capture.isDefinedAt _) match {
-            case Some((msg,rest)) =>
-              capture(msg)
-              State(s.msgs ::: rest, None)
-            case None => 
-              val msgs = s.msgs ::: actionMsgs
-              deferredCancel match {
-                case Some(cancel) => 
-                  cancel(capture)
-                  State(msgs, None)
-                case None => 
-                  State(msgs, c)
-              }
-          }
-        } else {
-          //check all msgs
-          val msgs = if (!actionMsgs.isEmpty) s.msgs ::: actionMsgs else s.msgs
-          removeFirst(msgs, capture.isDefinedAt _) match {
-            case Some((msg,rest)) =>
-              capture(msg)
-              State(rest, None)
-            case None =>
-              deferredCancel match {
-                case Some(cancel) => 
-                  cancel(capture)
-                  State(msgs, None)
-                case None => 
-                  State(msgs, c)
-              }
-          }
-        }
-      case None =>
-        val msgs = if (!actionMsgs.isEmpty) s.msgs ::: actionMsgs else s.msgs
-        State(msgs, None)
     }
   }
 
@@ -738,7 +511,7 @@ object ProcessCps extends Log {
       }
     }
 */    val queue = queue_org
-    val messageBox: MessageBox[Any] = new MessageBox[Any](queue)
+    val messageBox: MessageBox = new MessageBox(queue)
     private[this] val mgmtSteps = new java.util.concurrent.atomic.AtomicReference[List[ProcessState => ProcessState]](Nil)
     private[this] val flowHandler = new ProcessFlowHandler {
       override def step(state: ProcessState) = {
@@ -821,3 +594,235 @@ object ProcessCps extends Log {
 
 }
 
+
+/**
+ * Message box for many senders and a single consumer.
+ */
+trait MessageBoxContainer[T] extends Log {
+    type Capture = PartialFunction[T,Unit]
+    type Cancel = Capture => Unit
+
+    private[this] trait Captures {
+      def add(capture: Capture): Captures
+      def add(cancel: Cancel): Captures
+      def apply(old: Option[Capture]): (Option[Capture],Option[Cancel])
+      def resultsInCapture(current: Boolean): Boolean
+    }
+    private[this] object Captures0 extends Captures {
+      override def add(capture: Capture) = new Captures1A(capture)
+      override def add(cancel: Cancel) = new Captures1R(cancel)
+      override def apply(old: Option[Capture]) = (old, None)
+      override def resultsInCapture(current: Boolean) = current
+    }
+    private[this] class Captures1A(capture: Capture) extends Captures {
+      override def add(captureNew: Capture) =
+        throw new IllegalStateException("Already a capture registered (A)")
+      override def add(cancel: Cancel) =
+        new Captures2AR(capture, cancel)
+      override def apply(old: Option[Capture]) = {
+        if (old.isDefined)
+          throw new IllegalStateException("Uncancelled capture (A)")
+        (Some(capture),None)
+      }
+      override def resultsInCapture(current: Boolean) = true
+    }
+    private[this] class Captures1R(cancel: Cancel) extends Captures {
+      override def add(capture: Capture) =
+        throw new IllegalStateException("Processing continued before cancel was executed")
+      override def add(cancelNew: Cancel) =
+        throw new IllegalStateException("Already a cancel registerd (R)")
+      override def apply(old: Option[Capture]) = {
+        old.foreach(cancel(_))
+        (None, None)
+      }
+      override def resultsInCapture(current: Boolean) = false
+    }
+    private[this] class Captures2AR(capture: Capture, cancel: Cancel) extends Captures {
+      override def add(captureNew: Capture) = {
+        cancel(capture)
+        new Captures1A(captureNew)
+      }
+      override def add(cancelNew: Cancel) =
+        throw new IllegalStateException("Already a cancel registerd (AR)")
+      override def apply(old: Option[Capture]) = {
+        if (old.isDefined)
+          throw new IllegalStateException("Uncancelled capture (AR)")
+        (Some(capture),Some(cancel))
+      }
+      override def resultsInCapture(current: Boolean) = false
+    }
+
+    private[this] case class Actions(in: List[T], captures: Captures, checkerRunning: Boolean, hasMsgs: Boolean, hasCapture: Boolean)
+    private[this] object ActionsRMC extends Actions (Nil, Captures0, true, true, true)
+    private[this] object ActionsRfC extends Actions (Nil, Captures0, true, false, true)
+    private[this] object ActionsRMf extends Actions (Nil, Captures0, true, true, false)
+    private[this] object ActionsRff extends Actions (Nil, Captures0, true, false, false)
+    private[this] object ActionsfMC extends Actions (Nil, Captures0, false, true, true)
+    private[this] object ActionsffC extends Actions (Nil, Captures0, false, false, true)
+    private[this] object ActionsfMf extends Actions (Nil, Captures0, false, true, false)
+    private[this] object Actionsfff extends Actions (Nil, Captures0, false, false, false)
+
+    private[this] case class State(msgs: List[T], capture: Option[Capture])
+
+  /**
+   * Message box for many senders and a single consumer.
+   */
+  protected class MessageBox(checkExec: ExecutionQueue) {
+    import java.util.concurrent.atomic._
+    import ch.inventsoft.scalabase.extcol.ListUtil._
+
+    //Actions to execute. Modified and read by all threads
+    private[this] val pending = new AtomicReference[Actions](Actions(Nil, Captures0, false, false, false))
+    //State of the message box. Only accessed by the checker-threads (not-concurrent)
+    @volatile private[this] var state = State(Nil, None)
+
+    /**
+     * Enqueue a new message.
+     * Does complete fast, does never block. The amount of code executed in the caller thread
+     * is minimal. No capture check is done in this thread.
+     */
+    def enqueue(msg: T): Unit = {
+      val actions = pending.get
+      val msgs = msg :: actions.in
+      if (actions.checkerRunning || !actions.hasCapture) {
+        val na = actions.copy(in=msgs, hasMsgs=true)
+        if (!pending.compareAndSet(actions, na)) enqueue(msg) // retry
+      } else {
+        val na = actions.copy(in=msgs, hasMsgs=true, checkerRunning=true)
+        if (pending.compareAndSet(actions, na)) checkExec <-- check
+        else enqueue(msg) //retry
+      }
+    }
+
+    /**
+     * Register a new capture for the message box.
+     */
+    def setCapture(capture: Capture): Unit = {
+      val actions = pending.get
+      val ncs = actions.captures.add(capture)
+      if (actions.checkerRunning || !actions.hasMsgs) {
+        val na = actions.copy(captures=ncs, hasCapture=true)
+        if (!pending.compareAndSet(actions, na)) setCapture(capture) //retry
+      } else {
+        val na = actions.copy(captures=ncs, hasCapture=true, checkerRunning=true)
+        if (pending.compareAndSet(actions, na)) checkExec <-- check 
+        else setCapture(capture) //retry
+      }
+    }
+    /**
+     * Cancel the currently registered capture.
+     * The 'cancel' will be called with the deregistered capture. If no capture is registered
+     * then this method is a no-op, 'cancel' will not be called.
+     */
+    def cancelCapture(cancel: Cancel): Unit = {
+      val actions = pending.get
+      val ncs = actions.captures.add(cancel)
+      if (actions.checkerRunning || !actions.hasCapture) {
+        val na = actions.copy(captures=ncs, hasCapture=false)
+        if (!pending.compareAndSet(actions, na)) cancelCapture(cancel) //retry
+      } else {
+        val na = actions.copy(captures=ncs, hasCapture=false, checkerRunning=true)
+        if (pending.compareAndSet(actions, na)) checkExec <-- check 
+        else cancelCapture(cancel) //retry
+      }
+    }
+
+    /**
+     * Guarantees:
+     * - only active once ('synchronized') and only in the checkExec queue
+     * - sees every msg without external delay
+     */
+    private[this] def check = {
+      def process(s: State): Unit = {
+        val actions = pending.get
+
+        val runningAction = {
+          if (actions.in.nonEmpty || s.msgs.nonEmpty) {
+            if (actions.captures.resultsInCapture(s.capture.isDefined)) ActionsRMC
+            else ActionsRMf
+          } else {
+            if (actions.captures.resultsInCapture(s.capture.isDefined)) ActionsRfC
+            else ActionsRff
+          }
+        }
+
+        //Confirm that we received the action..
+        if (!pending.compareAndSet(actions, runningAction)) process(s)
+        else {
+          val (capture, deferredCancel) = actions.captures(s.capture)
+
+          //try to apply the capture and merge the action-msgs into the state
+          val s2 = processMsgs(s, capture, deferredCancel, actions.in.reverse)
+
+          // need to do that before cas, because everything after cas might overlap with next invocation
+          state = s2 
+
+          val notRunningAction = {
+            if (s2.msgs.nonEmpty) {
+              if (s2.capture.isDefined) ActionsfMC
+              else ActionsfMf
+            } else {
+              if (s2.capture.isDefined) ActionsffC
+              else Actionsfff
+            }
+          }
+
+          //See if we can terminate..
+          if (!pending.compareAndSet(runningAction, notRunningAction)) {
+            // new messages/captures arrived, so we need to rerun ourselves
+            process(s2)
+          }
+        }
+      }
+      process(state)
+    }
+
+
+    /**
+     * Process messages and apply the captures.
+     * @param s current state
+     * @param capture the capture to apply (new/ols capture)
+     * @param actionMsgs new messages
+     * @return new state
+     */
+    private[this] def processMsgs(s: State, capture: Option[Capture], deferredCancel: Option[Cancel], actionMsgs: List[T]): State = capture match {
+      case c @ Some(capture) =>
+        if (s.capture == capture) {
+          //only check the new msgs
+          removeFirst(actionMsgs, capture.isDefinedAt _) match {
+            case Some((msg,rest)) =>
+              capture(msg)
+              State(s.msgs ::: rest, None)
+            case None => 
+              val msgs = s.msgs ::: actionMsgs
+              deferredCancel match {
+                case Some(cancel) => 
+                  cancel(capture)
+                  State(msgs, None)
+                case None => 
+                  State(msgs, c)
+              }
+          }
+        } else {
+          //check all msgs
+          val msgs = if (!actionMsgs.isEmpty) s.msgs ::: actionMsgs else s.msgs
+          removeFirst(msgs, capture.isDefinedAt _) match {
+            case Some((msg,rest)) =>
+              capture(msg)
+              State(rest, None)
+            case None =>
+              deferredCancel match {
+                case Some(cancel) => 
+                  cancel(capture)
+                  State(msgs, None)
+                case None => 
+                  State(msgs, c)
+              }
+          }
+        }
+      case None =>
+        val msgs = if (!actionMsgs.isEmpty) s.msgs ::: actionMsgs else s.msgs
+        State(msgs, None)
+    }
+  }
+}
