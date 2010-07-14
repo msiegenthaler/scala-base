@@ -191,19 +191,66 @@ object ProcessCps extends Log {
 //TODO idea: we could only spawn a checker if a capture is active
 // - add a second paramter to the inQueue (alreadyChecking, capturePossiblyActive)
 
-  private class MessageBox[T](checkExec: ExecutionQueue) {
+  private class MessageBox[T](checkExec: ExecutionQueue) extends Log {
     import java.util.concurrent.atomic._
     import ch.inventsoft.scalabase.extcol.ListUtil._
     type Capture = PartialFunction[T,Unit]
+    type Cancel = Capture => Unit
 
-    private[this] case class Actions(in: List[T], in_len: Int, captures: List[Either[Capture,Capture => Unit]], checkerRunning: Boolean)
-    private[this] object InitialActions extends Actions(Nil, 0, Nil, false) //TODO do not instantiate per message box instance
+    private[this] trait Captures {
+      def add(capture: Capture): Captures
+      def add(cancel: Cancel): Captures
+      def apply(old: Option[Capture]): (Option[Capture],Option[Cancel])
+    }
+    private[this] object Captures0 extends Captures {
+      override def add(capture: Capture) = new Captures1A(capture)
+      override def add(cancel: Cancel) = new Captures1R(cancel)
+      override def apply(old: Option[Capture]) = (old, None)
+    }
+    private[this] class Captures1A(capture: Capture) extends Captures {
+      override def add(captureNew: Capture) =
+        throw new IllegalStateException("Already a capture registered (A)")
+      override def add(cancel: Cancel) =
+        new Captures2AR(capture, cancel)
+      override def apply(old: Option[Capture]) = {
+        if (old.isDefined)
+          throw new IllegalStateException("Uncancelled capture (A)")
+        (Some(capture),None)
+      }
+    }
+    private[this] class Captures1R(cancel: Cancel) extends Captures {
+      override def add(capture: Capture) =
+        throw new IllegalStateException("Processing continued before cancel was executed")
+      override def add(cancelNew: Cancel) =
+        throw new IllegalStateException("Already a cancel registerd (R)")
+      override def apply(old: Option[Capture]) = {
+        old.foreach(cancel(_))
+        (None, None)
+      }
+    }
+    private[this] class Captures2AR(capture: Capture, cancel: Cancel) extends Captures {
+      override def add(captureNew: Capture) = {
+        cancel(capture)
+        new Captures1A(captureNew)
+      }
+      override def add(cancelNew: Cancel) =
+        throw new IllegalStateException("Already a cancel registerd (AR)")
+      override def apply(old: Option[Capture]) = {
+        if (old.isDefined)
+          throw new IllegalStateException("Uncancelled capture (AR)")
+        (Some(capture),Some(cancel))
+      }
+    }
+
+    private[this] case class Actions(in: List[T], captures: Captures, checkerRunning: Boolean)
+    private[this] object InitialActions extends Actions(Nil, Captures0, false) //TODO do not instantiate per message box instance
+    private[this] object InitialActionsRunning extends Actions(Nil, Captures0, true) //TODO do not instantiate per message box instance
     private[this] case class State(msgs: List[T], capture: Option[Capture])
 
     //Actions to execute. Modified and read by all threads
     private[this] val pending = new AtomicReference[Actions](InitialActions)
     //State of the message box. Only accessed by the checker-threads (not-concurrent)
-    private[this] var state = State(Nil, None)
+    @volatile private[this] var state = State(Nil, None)
 
     /**
      * Enqueue a new message.
@@ -213,11 +260,11 @@ object ProcessCps extends Log {
     def enqueue(msg: T): Unit = {
       val actions = pending.get
       if (actions.checkerRunning) {
-        val na = actions.copy(in = msg :: actions.in, in_len = actions.in_len+1)
+        val na = actions.copy(in = msg :: actions.in)
         if (!pending.compareAndSet(actions, na)) enqueue(msg) // retry
       } else {
-        val na = actions.copy(in = msg :: actions.in, in_len = actions.in_len+1, checkerRunning = true)
-        if (pending.compareAndSet(actions, na)) checkExec <-- check
+        val na = actions.copy(in = msg :: actions.in, checkerRunning = true)
+        if (pending.compareAndSet(actions, na)) checkExec <-- check //TODO only do that is a capture is active?
         else enqueue(msg) //retry
       }
     }
@@ -227,27 +274,26 @@ object ProcessCps extends Log {
      * Does replace the previously registered capture.
      */
     def setCapture(capture: Capture): Unit = {
-      addCapture(Left(capture))
+      addCapture(_.add(capture))
     }
-
     /**
      * Cancel the currently registered capture.
-     * The 'fun' will be called with the deregistered capture. If no capture is registered
-     * then this method is a no-op, 'fun' will not be called.
+     * The 'cancel' will be called with the deregistered capture. If no capture is registered
+     * then this method is a no-op, 'cancel' will not be called.
      */
-    def cancelCapture(fun: Capture => Unit): Unit = {
-      addCapture(Right(fun))
+    def cancelCapture(cancel: Cancel): Unit = {
+      addCapture(_.add(cancel))
     }
-
-    private[this] def addCapture(toAdd: Either[Capture,Capture => Unit]): Unit = {
+    private[this] def addCapture(fun:  Captures => Captures): Unit = {
       val actions = pending.get
+      val ncs = fun(actions.captures)
       if (actions.checkerRunning) {
-        val na = actions.copy(captures = toAdd :: actions.captures)
-        if (!pending.compareAndSet(actions, na)) addCapture(toAdd) //retry
+        val na = actions.copy(captures = ncs)
+        if (!pending.compareAndSet(actions, na)) addCapture(fun) //retry
       } else {
-        val na = actions.copy(captures = toAdd :: actions.captures, checkerRunning = true)
-        if (pending.compareAndSet(actions, na)) checkExec <-- check
-        else addCapture(toAdd) //retry
+        val na = actions.copy(captures = ncs, checkerRunning = true)
+        if (pending.compareAndSet(actions, na)) checkExec <-- check 
+        else addCapture(fun) //retry
       }
     }
 
@@ -256,35 +302,23 @@ object ProcessCps extends Log {
      * - only active once ('synchronized') and only in the checkExec queue
      * - sees every msg without external delay
      */
-    private[this] def check = synchronized { //TODO faster if just volatile?
-      def process(s: State, skipMsgs: Int = 0, skipCaptures: Int = 0): State = {
-        val actions = pending.get
-
-        val captures_len = actions.captures.length
-        val captures = {
-          if (skipCaptures==0) actions.captures
-          else actions.captures.take(captures_len - skipCaptures)
-        }
-        val capture = actions.captures.foldLeft(s.capture) { (cap,e) => e match {
-          case Left(capture) => Some(capture)
-          case Right(cancel) => 
-            cap.foreach(cancel(_))
-            None
-        }}
-
-        val in_len = actions.in_len
-        val in = {
-          if (skipMsgs==0) actions.in
-          else actions.in.take(in_len - skipMsgs)
-        }
-
-        val s2 = processMsgs(s, capture, in.reverse)
-        if (pending.compareAndSet(actions, InitialActions)) s2
-        else process(s2, in_len, captures_len)
+    private[this] def check = {
+      def process(s: State): Unit = {
+        val actions = getActions
+        val (capture, deferredCancel) = actions.captures(s.capture)
+      
+        val s2 = processMsgs(s, capture, deferredCancel, actions.in.reverse)
+        state = s2 // need to do that before cas, because everything after cas might overlap with next invocation
+        if (!pending.compareAndSet(InitialActionsRunning, InitialActions)) process(s2)
       }
-
-      state = process(state)
+      process(state)
     }
+    private[this] def getActions: Actions = {
+      val actions = pending.get
+      if (!pending.compareAndSet(actions, InitialActionsRunning)) getActions
+      else actions
+    }
+
     /**
      * Process messages and apply the captures.
      * @param s current state
@@ -292,7 +326,7 @@ object ProcessCps extends Log {
      * @param actionMsgs new messages
      * @return new state
      */
-    private[this] def processMsgs(s: State, capture: Option[Capture], actionMsgs: List[T]): State = capture match {
+    private[this] def processMsgs(s: State, capture: Option[Capture], deferredCancel: Option[Cancel], actionMsgs: List[T]): State = capture match {
       case c @ Some(capture) =>
         if (s.capture == capture) {
           //only check the new msgs
@@ -301,86 +335,36 @@ object ProcessCps extends Log {
               capture(msg)
               State(s.msgs ::: rest, None)
             case None => 
-              State(s.msgs ::: actionMsgs, c)
+              val msgs = s.msgs ::: actionMsgs
+              deferredCancel match {
+                case Some(cancel) => 
+                  cancel(capture)
+                  State(msgs, None)
+                case None => 
+                  State(msgs, c)
+              }
           }
         } else {
           //check all msgs
-          val msgs = s.msgs ::: actionMsgs
+          val msgs = if (!actionMsgs.isEmpty) s.msgs ::: actionMsgs else s.msgs
           removeFirst(msgs, capture.isDefinedAt _) match {
             case Some((msg,rest)) =>
               capture(msg)
               State(rest, None)
             case None =>
-              State(msgs, c)
+              deferredCancel match {
+                case Some(cancel) => 
+                  cancel(capture)
+                  State(msgs, None)
+                case None => 
+                  State(msgs, c)
+              }
           }
         }
       case None =>
-        State(s.msgs ::: actionMsgs, None)
+        val msgs = if (!actionMsgs.isEmpty) s.msgs ::: actionMsgs else s.msgs
+        State(msgs, None)
     }
-
-
-/*
-    private[this] def check = synchronized { // TODO faster if not synched and state made volatile?
-      def processActions(readActions: Actions, actionsToProcess: Actions, s: State, msgsProcessed: Int = 0): Unit = {
-println("## state.capture = ", state.capture.map(_.hashCode).getOrElse("None"))
-        val ns = process(s, actionsToProcess)
-        state = ns
-        if (!pending.compareAndSet(readActions, InitialActions)) {
-          //failed to update pending, since new actions came in since we last read it. So merge it..
-          val alreadyProcessed = msgsProcessed + actionsToProcess.in_len
-          val na = pending.get
-          val nin_len = na.in_len - alreadyProcessed
-          val nin = na.in.take(nin_len)
-          val nc = na.captures.take(na.captures.length - actionsToProcess.captures.length)
-          val merged = na.copy(in = nin, in_len=nin_len, captures=nc)
-          processActions(na, merged, ns, alreadyProcessed)
-        }
-      }
-      val actions = pending.get
-      processActions(actions, actions, state)
-    }
-    
-    private[this] def process(state: State, actions: Actions): State = {
-      val s1 = processCaptures(state, actions.captures.reverse)
-      val s2 = processMessages(s1, actions)
-      s2
-    }
-    private[this] def processCaptures(state: State, captures: List[Either[Capture,Capture => Unit]]): State = captures match {
-      case Nil => state
-      case Left(capture) :: rest =>
-        val s= removeLast(state.msgs, capture.isDefinedAt _) match {
-          case Some((msg,nm)) => //message matched capture
-println("## fast match capture "+capture.hashCode)
-            capture(msg)
-            state.copy(capture=None, msgs=nm)
-          case None =>
-println("## add capture "+capture.hashCode+" "+rest)
-            state.copy(capture=Some(capture))
-        }
-        processCaptures(s, rest)
-      case Right(cancel) :: rest =>
-        val s = if (state.capture.isDefined) {
-          cancel(state.capture.get)
-          state.copy(capture=None)
-        } else state
-        processCaptures(s, rest)
-    }
-    private[this] def processMessages(state: State, actions: Actions): State = if (actions.in_len > 0) {
-      state.capture match {
-        case Some(capture) =>
-          removeLast(actions.in, capture.isDefinedAt _) match {
-            case Some((msg, nm)) => //message matched capture
-println("## later match capture")
-              capture(msg)
-              state.copy(capture=None, msgs=nm ::: state.msgs)
-            case None =>
-println("## later no match")
-              state.copy(msgs = actions.in ::: state.msgs)
-          }
-        case None => state.copy(msgs = actions.in ::: state.msgs)
-      }
-    } else state
-    */
   }
 
   /**

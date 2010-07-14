@@ -53,9 +53,9 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         s.get(1000) should be(Some(true))
       }      
     }
-    ///////////////////////////////
+    /* /////////////////////////// */
     // Receive
-    ///////////////////////////////
+    /* /////////////////////////// */
     describe("receive") {
       it_("should be able to receive messages") {
         val s = new SyncVar[String]
@@ -289,9 +289,9 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
       }
     }
 
-    ///////////////////////////////
+    /* /////////////////////////// */
     // Monitoring
-    ///////////////////////////////
+    /* /////////////////////////// */
     describe("monitoring") {
       it_("should send a message to the parent if a Monitored child exits normally") {
         val s = new SyncVar[String]
@@ -667,10 +667,9 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
       }
     }
 
-    ///////////////////////////////
+    /* /////////////////////////// */
     // Performance
-    ///////////////////////////////
-    /*
+    /* /////////////////////////// */
     describe("performance") {
       it_("should be possible to start at least 10000 concurrent processes") {
         val c = (1 to 10000)
@@ -885,7 +884,6 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         ps.foreach(p => p ! Exit)
       }
     }
-  */
   }
 
   
