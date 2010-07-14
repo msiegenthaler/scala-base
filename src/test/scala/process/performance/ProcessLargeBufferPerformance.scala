@@ -16,17 +16,17 @@ object ProcessLargeBufferPerformance extends Log {
     //warmup
     log.info("Warming up")
     runRepeated(200, 1000)
-    runRepeated(2, 10000)
+    runRepeated(200, 10000)
     runRepeated(200, 1000)
 
     //execute
     log.info("Executing performance tests...")
     log.info("Medium sized (100 msgs)")
-    val (duration100,msgs100) =  runRepeated(1000, 100)
+    val (duration100,msgs100) =  runRepeated(2000, 100)
     log.info("Large (1000 msgs)")
-    val (duration1k,msgs1k) = runRepeated(500, 1000)
+    val (duration1k,msgs1k) = runRepeated(2000, 1000)
     log.info("Very large (10000 msgs)")
-    val (duration10k,msgs10k) = runRepeated(10, 10000)
+    val (duration10k,msgs10k) = runRepeated(2000, 10000)
     log.info("done.")
 
     val duration = duration100 + duration1k + duration10k
