@@ -7,7 +7,7 @@
 
   <logger name="ch.inventsoft.scalabase" level="info"/>
   <logger name="ch.inventsoft.scalabase.oip" level="info"/>
-  <logger name="ch.inventsoft.scalabase.process" level="debug"/>
+  <logger name="ch.inventsoft.scalabase.process" level="info"/>
   <logger name="ch.inventsoft.scalabase.process.cps" level="info"/>
 	
   <root level="warn">

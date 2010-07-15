@@ -106,7 +106,6 @@ class DependencySupervisorSpec extends ProcessSpec with ShouldMatchers {
         supervisor.stop
       }
     }
-    
     describe("shutdown") {
       it_("should stop the dependencies when we stop the supervisor") {
         val (supervisor, serial, lowlevel, series1) = initialize
@@ -118,6 +117,7 @@ class DependencySupervisorSpec extends ProcessSpec with ShouldMatchers {
         assertEquals(receiveWithin(1 s){ series1.addAndGet.option }, None) 
       }
     }
+
     describe("all-for-one") {
       it_("should restart all the dependencies if the first fails") {
         val (supervisor, serial_1, lowlevel_1, series1_1) = initialize

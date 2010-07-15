@@ -129,7 +129,9 @@ package object process {
    * Message signaling an expired timeout.
    * @see process.receiveWithin and process.receiveNoWait
    */
-  object Timeout
+  object Timeout {
+    override def toString = "Timeout"
+  }
 }
 
 

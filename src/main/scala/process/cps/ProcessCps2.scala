@@ -187,50 +187,132 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
   /**
    * ProcessAction receiving a message matching a partial function.
    */
-  private class ReceiveProcessAction[T](fun: PartialFunction[Any,T @processCps]) extends ProcessAction[T] with ReceiveSupport[T] {
+  private class ReceiveProcessAction[T](fun: PartialFunction[Any,T @processCps]) extends ProcessAction[T] with NestingSupport[T] {
     override def run(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler) = {
-      val capture = createCapture(fun, state, continue, flow)
-      state.messageBox.setCapture(capture)
+      val reg = new CaptureRegistrant(fun.isDefinedAt _, (s,m) => execNested(s,continue,flow)(fun(m)), flow)
+      reg.register(state)
     }
   }
   /**
    * ProcessAction receving a message matching a partial function within a certain timeframe.
    */
-  private class ReceiveWithinProcessAction[T](fun: PartialFunction[Any,T @processCps], timeout: Duration) extends ProcessAction[T] with ReceiveSupport[T] {
+  private class ReceiveWithinProcessAction[T](fun: PartialFunction[Any,T @processCps], timeout: Duration) extends ProcessAction[T] with NestingSupport[T] {
     override def run(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler) = {
-      val capture = createCapture(fun, state, continue, flow)
-      val timeoutTask = new java.util.TimerTask {
-        override def run = state.messageBox.cancelCapture { cap =>
-          if (cap == capture) cap(Timeout)
+      val messageBox = state.messageBox
+      class CaptureRegistrantWithin extends CaptureRegistrant(fun.isDefinedAt _, (s,m) => execNested(s,continue,flow)(fun(m)), flow) {
+        val timeoutTask = new java.util.TimerTask {
+          override def run = handleTimeout
+        }
+        val done = new java.util.concurrent.atomic.AtomicBoolean(false)
+
+        override def register(state: ProcessState) = {
+          val capture = createCapture(state)
+          messageBox.setCapture(capture)
+          timer.schedule(timeoutTask, timeout.amountAs(Milliseconds))
+        }
+        override def reregisterCapture(state: ProcessState) = {
+          val capture = createCapture(state)
+          messageBox.setCapture(capture)
+        }
+        protected override def execute(state: ProcessState, msg: Any) = {
+          if (done.compareAndSet(false, true)) {
+            timeoutTask.cancel
+            super.execute(state, msg)
+          }
+        }
+        protected[this] def handleTimeout: Unit = {
+          messageBox.cancelCapture { _ match {
+            case capture: CaptureRegistrantCreated if capture.registrant == CaptureRegistrantWithin.this =>
+              capture(Timeout)
+            case other => 
+              ()
+          }}
         }
       }
-      state.messageBox.setCapture(capture.andBefore { msg =>
-        timeoutTask.cancel // got a msg before the timeout triggered, so cancel the timeout
-        msg
-      })
-      timer.schedule(timeoutTask, timeout.amountAs(Milliseconds))
+      val reg = new CaptureRegistrantWithin
+      reg.register(state)
     }
   }
   /**
    * ProcessAction receiving a matching message if already present, else Timeout.
    */
-  private class ReceiveNoWaitProcessAction[T](fun: PartialFunction[Any,T @processCps]) extends ProcessAction[T] with ReceiveSupport[T] {
+  private class ReceiveNoWaitProcessAction[T](fun: PartialFunction[Any,T @processCps]) extends ProcessAction[T] with NestingSupport[T] {
     override def run(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler) = {
-      val capture = createCapture(fun, state, continue, flow)
-      state.messageBox.setCapture(capture)
-      state.messageBox.cancelCapture { cap =>
-        if (cap == capture) cap(Timeout)
+      val reg = new CaptureRegistrant(fun.isDefinedAt _, (s,m) => execNested(s,continue,flow)(fun(m)), flow) {
+        override def register(state: ProcessState) = {
+          val capture = createCapture(state)
+          def cancel(current: Capture) = {
+            if (current == capture) capture(Timeout)
+          }
+          state.messageBox.setPeekCapture(capture, cancel _)
+        }
+      }
+      reg.register(state)
+    }
+  }
+
+  private class CaptureRegistrant(matcher: Any => Boolean, fun: (ProcessState,Any) => Unit, flow: ProcessFlowHandler) {
+    def register(state: ProcessState): Unit = {
+      val cap = createCapture(state)
+      state.messageBox.setCapture(cap)
+    }
+    def reregisterCapture(state: ProcessState): Unit = {
+      register(state)
+    }
+
+    protected[this] def createCapture(state: ProcessState): Capture = new PartialFunction[Any,Unit] with CaptureRegistrantCreated {
+      override val registrant = CaptureRegistrant.this
+      override def isDefinedAt(msg: Any) = matcher(msg) || msg==ManagementMessage
+      override def apply(msg: Any) = {
+        if (msg == ManagementMessage) processMgmt(state)
+        else execute(state, msg)
+      }
+    }
+    protected def execute(state: ProcessState, msg: Any): Unit = {
+      fun(state, msg)
+    }
+    protected[this] def processMgmt(state: ProcessState) = {
+      try {
+        val state2 = flow.step(state)
+        try {
+          reregisterCapture(state2)
+        } catch {
+          case t => flow.exception(state2, t)
+        }
+      } catch {
+        case t => flow.exception(state, t)
       }
     }
   }
-  /** common functions for all receive actions */
-  private trait ReceiveSupport[T] extends NestingSupport[T] {
-    protected[this] def createCapture(fun: PartialFunction[Any,T @processCps], state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler): CaptureFun = {
-      new CaptureFun(state, flow, fun.isDefinedAt _, (state, msg) => {
-        execNested(state, continue, flow) { fun(msg) }
-      })
-    }
+  private trait CaptureRegistrantCreated {
+    val registrant: CaptureRegistrant
   }
+
+/*
+  private class CaptureFun(matcher: Any => Boolean, fun: (ProcessState,Any) => Unit, state: ProcessState, flow: ProcessFlowHandler) extends PartialFunction[Any,Unit] {
+    override def isDefinedAt(msg: Any) = {
+      matcher(msg) || msg == ManagementMessage
+    }
+    override def apply(msg: Any) = {
+      if (msg == ManagementMessage) processManagementMessage
+      else fun(state, msg)
+    }
+    protected[this] def processManagementMessage = {
+      try {
+        val state2 = flow.step(state)
+        try {
+          rescheduleCapture(state2)
+        } catch {
+          case t => flow.exception(state2, t)
+        }
+      } catch {
+        case t => flow.exception(state, t)
+      }
+    }
+    protected[this] def rescheduleCapture(withState: ProcessState): Unit
+  }
+*/
+/*
   private class CaptureFun(state: ProcessState, flow: ProcessFlowHandler, matcher: Any => Boolean, fun: (ProcessState, Any) => Unit) extends PartialFunction[Any,Unit] {
     override def isDefinedAt(msg: Any) = {
       matcher(msg) || msg == ManagementMessage
@@ -247,6 +329,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
             if (state2 == state) this
             else {
               val me = this
+              new CaptureFun(state2, flow, matcher, fun)
               new CaptureFun(state2, flow, matcher, fun) with Proxy {
                 override val self = me
                 override def equals(other: Any) = self.equals(other) || eq(other.asInstanceOf[AnyRef])
@@ -268,8 +351,9 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
         override val self = me
       }
     }
-    override def toString = "Capture"
+    override def toString = "CaptureFun"
   }
+  */
 
   private val timer = new java.util.Timer(true)
 
@@ -715,14 +799,31 @@ trait MessageBoxContainer[T] extends Log {
       val actions = pending.get
       val ncs = actions.captures.add(cancel)
       if (actions.checkerRunning || !actions.hasCapture) {
-        val na = actions.copy(captures=ncs, hasCapture=false)
+        val na = actions.copy(captures=ncs)
         if (!pending.compareAndSet(actions, na)) cancelCapture(cancel) //retry
       } else {
-        val na = actions.copy(captures=ncs, hasCapture=false, checkerRunning=true)
+        val na = actions.copy(captures=ncs, checkerRunning=true)
         if (pending.compareAndSet(actions, na)) checkExec <-- check 
         else cancelCapture(cancel) //retry
       }
     }
+
+    /**
+     * Register a capture and cancel it right away. The capture will check all msgs received
+     * so far and the be canceled.
+     */
+    def setPeekCapture(capture: Capture, cancel: Cancel): Unit = {
+      val actions = pending.get
+      val ncs = actions.captures.add(capture).add(cancel)
+      if (actions.checkerRunning) { // must run always, else the capture does not get cancelled
+        val na = actions.copy(captures=ncs, hasCapture=true)
+        if (!pending.compareAndSet(actions, na)) setPeekCapture(capture, cancel) //retry
+      } else {
+        val na = actions.copy(captures=ncs, hasCapture=true, checkerRunning=true)
+        if (pending.compareAndSet(actions, na)) checkExec <-- check
+        else setPeekCapture(capture, cancel) //retry
+      }
+    } 
 
     /**
      * Guarantees:
@@ -747,7 +848,6 @@ trait MessageBoxContainer[T] extends Log {
         if (!pending.compareAndSet(actions, runningAction)) process(s)
         else {
           val (capture, deferredCancel) = actions.captures(s.capture)
-
           //try to apply the capture and merge the action-msgs into the state
           val s2 = processMsgs(s, capture, deferredCancel, actions.in.reverse)
 
@@ -823,3 +923,6 @@ trait MessageBoxContainer[T] extends Log {
     }
   }
 }
+
+//TODO there is a problem with deferred cancel, if the captures in a receiveWithin/receiveNoWait
+// matches a ManagementMsg and the cancel is received before the capture is readded

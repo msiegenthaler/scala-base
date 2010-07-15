@@ -9,7 +9,7 @@ import ch.inventsoft.scalabase.time._
 import Messages._
 import scala.concurrent._
 
-class StateServerTest extends ProcessSpec with ShouldMatchers {
+class StateServerSpec extends ProcessSpec with ShouldMatchers {
   object PeopleStateServer extends SpawnableCompanion[PeopleStateServer] {
     def apply(): PeopleStateServer @processCps = apply(SpawnAsRequiredChild)
     def apply(as: SpawnStrategy): PeopleStateServer @processCps = start(as) {
