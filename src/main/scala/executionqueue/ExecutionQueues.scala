@@ -52,7 +52,20 @@ object ExecutionQueues {
   def queue: ExecutionQueueGenerator =
     new ExecutionQueueGenerator(createQueue, initialSpec)
 
-  
+  /**
+   * "Thread-local" for the execution. Will be cleared after the execution finishes.
+   */
+  def executionLocal_=(value: Option[Any]) = {
+    currentExecThread.foreach(_.local = value)
+  }
+  /** Access the "execution-local". Return None if not set or not inside an executor */
+  def executionLocal: Option[Any] = currentExecThread.flatMap(_.local)
+
+  private[this] def currentExecThread: Option[ExecutorThread] = Thread.currentThread match {
+    case thread: ExecutorThread => Some(thread)
+    case other => None
+  }
+
   //TODO figure something out to allow "auto-termination"
   /**
    * Shutdown the execution queues. The object is not usable after this method has been called.
@@ -176,4 +189,8 @@ trait Executor {
 case class ExecutorSpec(priority: Priority, mightBlock: Boolean)
 trait ExecutorFactory {
   def createExecutor(label: String, spec: ExecutorSpec): Executor
+}
+
+trait ExecutorThread {
+  var local: Option[Any] = None
 }

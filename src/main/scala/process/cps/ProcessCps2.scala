@@ -31,7 +31,6 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
     def currentProcess: Option[Process] = ProcessImpl.currentProcess
   }
 
-
   def valueToCps[A](value: A) = new ValueProcessAction(value).cps
   def noop: Unit @processCps = NoopAction.cps
 
@@ -250,6 +249,8 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
               val me = this
               new CaptureFun(state2, flow, matcher, fun) with Proxy {
                 override val self = me
+                override def equals(other: Any) = self.equals(other) || eq(other.asInstanceOf[AnyRef])
+                override def toString = self.toString+"'"
               }
             }
           }
@@ -267,6 +268,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
         override val self = me
       }
     }
+    override def toString = "Capture"
   }
 
   private val timer = new java.util.Timer(true)
@@ -464,7 +466,6 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
    * Implementation of a process.
    */
   private object ProcessImpl {
-
     def root(queue: ExecutionQueue, body: => Any @processCps): ProcessInternal = {
       new ProcessImpl(queue, RootProcessListener, body)
     }
@@ -477,10 +478,12 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
       new ProcessImpl(queue, tm, body)
     }
 
-    private val current = new ThreadLocal[Option[Process]] {
-      override def initialValue = None
+    def currentProcess: Option[Process] = {
+      ExecutionQueues.executionLocal.flatMap { p =>
+        if (p.isInstanceOf[Process]) Some(p.asInstanceOf[Process])
+        else None
+      }
     }
-    def currentProcess: Option[Process] = current.get
   }
   private final val pidDealer = new java.util.concurrent.atomic.AtomicLong(0)
 
@@ -492,25 +495,19 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
         body
         lastFun
       }
-      toExecute.run(ProcessState(this, Nil, Nil, Nil), IgnoreProcessResult, flowHandler)
+      queue <-- {
+        ExecutionQueues.executionLocal = Some(ProcessImpl.this)
+        toExecute.run(ProcessState(this, Nil, Nil, Nil), IgnoreProcessResult, flowHandler)
+      }
     }
 
     val pid = pidDealer.incrementAndGet
-    //TODO this is very slow, use something more efficient or find a different solution for this
-    // 'unsafe' feature
-/*
     val queue = new ExecutionQueue {
-      private[this] val me = Some(ProcessImpl.this)
       override def execute(f: => Unit) = queue_org <-- {
-        ProcessImpl.current.set(Some(ProcessImpl.this))
-        try {
-          f
-        } finally {
-          ProcessImpl.current.set(None)
-        }
+        ExecutionQueues.executionLocal = Some(ProcessImpl.this)
+        f
       }
     }
-*/    val queue = queue_org
     val messageBox: MessageBox = new MessageBox(queue)
     private[this] val mgmtSteps = new java.util.concurrent.atomic.AtomicReference[List[ProcessState => ProcessState]](Nil)
     private[this] val flowHandler = new ProcessFlowHandler {

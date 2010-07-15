@@ -233,7 +233,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         s1.get(1000) should be(Some("Mario is nice"))
         s2.get(1000) should be(Some("Mario is nice\nbye"))
       }
-      it_("should support receives with timeouts (timeouted)") {
+      it_("should support receives with timeouts (timeouted)"){ (1 to 100).foreach_cps { _ =>
         val s = new SyncVar[String]
         val p = spawn {
           receiveWithin(10 ms) {
@@ -244,7 +244,17 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         sleep(50 ms)
         p ! "hi"
         s.get(1000) should be(Some("timeout"))
-      }
+      }}
+      it_("should support receives with timeouts (sleep)"){ (1 to 100).foreach_cps { _ =>
+        val s = new SyncVar[String]
+        val p = spawn {
+          receiveWithin(100 ms) {
+            case Timeout => s.set("timeout")
+            case x => s.set("fail")
+          }
+        }
+        s.get(1000) should be(Some("timeout"))
+      }}
       it_("should support receives with timeouts (not timeouted)") {
         val s = new SyncVar[String]
         val p = spawn {
@@ -354,7 +364,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
               s.set("ok")
           }
         }
-        s.get(1000) should be(Some("ok"))
+        s.get(1200) should be(Some("ok"))
       }
       
       it_("should crash the parent if a Required child crashes") {
@@ -664,6 +674,13 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         }
         s.get(1000) should be(Some("Hi there"))
         s2.get(1000) should be(Some("ok"))
+      }
+    }
+    describe("use with care") {
+      it_("should be possible to get the current") {
+        val p1 = self
+        val p2 = useWithCare.currentProcess
+        Some(p1) should be(p2)
       }
     }
 
