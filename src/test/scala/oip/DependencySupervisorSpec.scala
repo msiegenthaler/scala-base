@@ -9,14 +9,15 @@ import cps.CpsUtils._
 
 
 class DependencySupervisorSpec extends ProcessSpec with ShouldMatchers {
-  trait TestStateServer extends StateServer[Int] {
+  trait TestStateServer extends StateServer {
+    type State = Int
     def queryProcess = process
     def addAndGet = call { state => (state, state+1) }
     def kill = cast { state => throw new RuntimeException("kill me") }
-    def stop = cast_ { state => None }
+    override def stop = super.stop
   }
   class SerialPort(portName: String) extends TestStateServer {
-    protected[this] override def initialState = 0
+    protected[this] override def init = 0
     def queryPortName = get(state => portName)
   }
   object SerialPort {
@@ -27,7 +28,7 @@ class DependencySupervisorSpec extends ProcessSpec with ShouldMatchers {
     }
   }
   class LowLevelXBee(serialPort: SerialPort) extends TestStateServer {
-    protected[this] override def initialState = 0
+    protected[this] override def init = 0
     def querySerialPort = get(state => serialPort)
   }
   object LowLevelXBee {
@@ -38,7 +39,7 @@ class DependencySupervisorSpec extends ProcessSpec with ShouldMatchers {
     }
   }
   class Series1XBee(lowLevel: LowLevelXBee) extends TestStateServer {
-    protected[this] override def initialState = 0
+    protected[this] override def init = 0
     def queryLowLevel = get(state => lowLevel)
   }
   object Series1XBee {

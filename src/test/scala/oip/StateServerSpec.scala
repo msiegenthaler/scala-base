@@ -16,10 +16,9 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
       new PeopleStateServer
     }	  
   }
-  class PeopleStateServer protected() extends StateServer[PeopleState] {
-    protected[this] override def initialState = PeopleState(0, Nil)
-    
-    override def start(as: SpawnStrategy) = super.start(as)
+  class PeopleStateServer protected() extends StateServer {
+    type State = PeopleState
+    protected[this] override def init = PeopleState(0, Nil)
     
     def addPerson(name: String) = cast { (state) =>
       tick
@@ -28,10 +27,10 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
     def addPersonFast(name: String) = cast { (state) =>
       PeopleState(state.counter + 1, name :: state.people)
     }
-    def count = call_ { state =>
+    def count = call { state =>
       val c = state.counter
       tick
-      (c, Some(state))
+      (c, state)
     }
     def count2 = get(_.counter)
     def people = call { state =>
@@ -39,24 +38,20 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
       (state.people, state)
     }
     def people2 = get(_.people)
-    def kill = cast_ { state =>
-      None
-    }
+    def kill = stop
     def die(of: Exception) = cast { state => throw of }
-    def countAndKill = call_ { state =>
-      (state.counter, None)
+    def countAndKill = {
+      val r = get(_.counter)
+      stop
+      r
     }
     
-    def countDefered = call_? { (state, r: (Int) => Unit) =>
-      spawn {
-        sleep(1 s)
-        r(state.counter)
-      }
-      Some(state)
+    def countDefered = async { state =>
+      sleep(1 s)
+      state.counter
     }
-    def countDefered2 = call_? { (state, r: (Int) => Unit) =>
-      r(state.counter)
-      Some(state)
+    def countDefered2 = async { state =>
+      state.counter
     }
     def getProcess = process
 
@@ -70,10 +65,13 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
       new ParentServer
     }
   }
-  class ParentServer protected() extends StateServer[List[Process]] {
-    protected[this] override def initialState = Nil
-    protected[this] override def handleProcessEnd(end: ProcessEnd, state: List[Process]) = {
-      Some(state.filterNot(_ == end.process))
+  class ParentServer protected() extends StateServer {
+    type State = List[Process]
+    protected[this] override def init = Nil
+    protected[this] override def handler(state: State) = super.handler(state).orElse_cps {
+      case end: ProcessEnd =>
+        val s = state.filterNot(_ == end.process)
+        Some(s)
     }
     def running = call { state =>
       (state, state)
@@ -223,7 +221,7 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
     }
   
     class SendTerminatePeopleStateServer(parent: Process) extends PeopleStateServer {
-      protected[this] override def terminatedNormally(finalState: PeopleState) = {
+      protected[this] override def termination(finalState: PeopleState) = {
         parent ! "Terminated"
       }
     }
@@ -232,7 +230,7 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
 	new SendTerminatePeopleStateServer(parent)
       }
     }
-  
+
     it_("should have a way to react to normal termination") {
       val server = SendTerminatePeopleStateServer(self, SpawnAsRequiredChild) 
       server addPerson "Claudia"
@@ -251,26 +249,11 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
         case Timeout => //ok
       }
     }
-    it_("should notify of stop requests") {
-      val a = new scala.concurrent.SyncVar[String]
-      val server = new PeopleStateServer {
-        override protected[this] def handleStopRequest(state: PeopleState) = {
-          a.set("ok")
-          None
-        }
-        def p = process
-      }
-      server.start(SpawnAsRequiredChild)
-      server.p ! Terminate
-      a.get(1000) should be(Some("ok"))
-      val c = receiveWithin(1 s)(server.count.option) 
-      c should be(None) 
-    }
-    
+
     it_("should not run into a NPE when the initializer is slow") {
       val p = new SyncVar[Process]
       val server = new PeopleStateServer() {
-        protected[this] override def initialState = {
+        protected[this] override def init = {
           p.set(process)
           sleep(500 ms)
           PeopleState(0, Nil)
@@ -287,7 +270,7 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
     it_("should not run into a NPE with a slow initializer (a bit different)") {
       val p = new SyncVar[Process]
       val server = new PeopleStateServer() {
-        protected[this] override def initialState = {
+        protected[this] override def init = {
           sleep(500 ms)
           PeopleState(0, Nil)
         }
@@ -300,7 +283,7 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
       (1 to 1000).foreach_cps { i =>
         val p = new SyncVar[Process]
         val server = new PeopleStateServer() {
-          protected[this] override def initialState = {
+          protected[this] override def init = {
             val myProcess = process
             p.set(myProcess)
             PeopleState(0, Nil)

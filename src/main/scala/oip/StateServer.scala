@@ -14,83 +14,74 @@ import ch.inventsoft.scalabase.log.Log
  * The state can be queried and modified using messages to the process. The messages are
  * emitted using special methods.
  */
-trait StateServer[State] extends Spawnable with Log {
-  type StateModifier = (State) => State @processCps
-  type StateModifierWithEnd = (State) => Option[State] @processCps
-  type StateModifierWithReply[R] = (State) => (R,State) @processCps
-  type StateModifierWithReplyAndEnd[R] = (State) => (R,Option[State]) @processCps
-  type StateModifierWithSpecialReply[R] = (State, Function1[R,Unit]) => (Option[State]) @processCps
-  type StateGetter[R] = (State) => R @processCps
-  
-  protected[this] def initialState: State @processCps
-  
-  private type Handler = PartialFunction[Any,Option[State] @processCps]
-  protected[this] override def body = step(initialState)
-  private[this] def step(state: State): Unit @processCps = {
-    val modifyStateHandler: Handler = {
-      case ModifyState(fun) => 
-        fun(state)
-      case msg @ ModifyStateWithReply(fun) => 
-        val (result,newState) = fun(state)
-        msg.replyValue(result)
-        newState
-      case msg @ ModifyStateWithSpecialReply(fun) =>
-        val resultFun = msg.replyValue _
-        val newState = fun(state, resultFun)
-        newState
-      case msg @ GetState(fun) =>
-        msg.replyValue(fun(state))
-        Some(state)
-    }
-    val specialHandler: Handler = {
-      case end: ProcessEnd => handleProcessEnd(end, state)
-      case Terminate => handleStopRequest(state)
-    }
-    val handler = modifyStateHandler.
-      orElse_cps(specialHandler).
-      orElse_cps(messageHandler(state)).
-      orElse_cps(unhandledMessageHandler(state))
-      
-    val newState = receive(handler)
-    if (newState.isDefined) step(newState.get)
-    else terminatedNormally(state)
+trait StateServer extends Spawnable with Log with Process {
+  protected type State
+
+  override def !(msg: Any): Unit = process ! msg
+  def ![R](msg: MessageWithSelectableReply[R]): MessageSelector[R] = {
+    msg.sendAndSelect(this)
   }
-  protected[this] def terminatedNormally(finalState: State): Unit @processCps = ()
-  protected[this] def handleProcessEnd(end: ProcessEnd, state: State): Option[State] @processCps = Some(state)
-  protected[this] def handleStopRequest(state: State): Option[State] @processCps = None
-  protected[this] def messageHandler(state: State): Handler = new PartialFunction[Any,Option[State] @processCps] {
-    override def isDefinedAt(msg: Any) = false
-    override def apply(msg: Any) = Some(state)
-  }
-  private[this] def unhandledMessageHandler(state: State): Handler = new PartialFunction[Any,Option[State] @processCps] {
-    override def isDefinedAt(msg: Any) = true
-    override def apply(msg: Any) = {
-      log.debug("StateServer {} received unhandled message {}", StateServer.this, msg)
-      Some(state)
-    }      
-  }
-  
-  private[this] trait StateServerMessage
-  private[this] case class ModifyState(modifier: StateModifierWithEnd) extends StateServerMessage
-  private[this] case class ModifyStateWithReply[R](modifier: StateModifierWithReplyAndEnd[R]) extends StateServerMessage with MessageWithSimpleReply[R]
-  private[this] case class ModifyStateWithSpecialReply[R](modifier: StateModifierWithSpecialReply[R]) extends StateServerMessage with MessageWithSimpleReply[R]
-  private[this] case class GetState[R](getter: StateGetter[R]) extends StateServerMessage with MessageWithSimpleReply[R]
-  
-  protected[this] def cast(f: StateModifier) = {
-    cast_(s => Some(f(s)))
-  }
-  protected[this] def cast_(f: StateModifierWithEnd): Unit = process ! ModifyState(f)
-  protected[this] def call[R](f: StateModifierWithReply[R]): MessageSelector[R] = {
-    call_ { s =>
-      val (r,s2) = f(s)
-      (r,Some(s2))
+
+  protected[this] def cast(modificator: State => State @processCps): Unit = {
+    this ! new ModifyStateMessage {
+      override def execute(state: State) = modificator(state)
     }
   }
-  protected[this] def call_[R](f: StateModifierWithReplyAndEnd[R]): MessageSelector[R] =
-    ModifyStateWithReply(f).sendAndSelect(process)
-  protected[this] def call_?[R](f: StateModifierWithSpecialReply[R]): MessageSelector[R] =
-    ModifyStateWithSpecialReply(f).sendAndSelect(process)
-  protected[this] def get[R](f: StateGetter[R]): MessageSelector[R] =
-    GetState(f).sendAndSelect(process)
+  protected[this] def call[R](fun: State => (R,State) @processCps): MessageSelector[R] = {
+    this ! new ModifyStateMessage with MessageWithSimpleReply[R] {
+      override def execute(state: State) = {
+        val (v, s) = fun(state)
+        replyValue(v)
+        s
+      }
+    }
+  }
+  protected[this] def get[R](getter: State => R @processCps): MessageSelector[R] = {
+    this ! new ModifyStateMessage with MessageWithSimpleReply[R] {
+      override def execute(state: State) = {
+        val v = getter(state)
+        replyValue(v)
+        state
+      }
+    }
+  }
+  protected[this] def async[R](fun: State => R @processCps) = {
+    this ! new ModifyStateMessage with MessageWithSimpleReply[R] {
+      override def execute(state: State) = {
+        spawnChild(Required) {
+          val r = fun(state)
+          replyValue(r)
+        }
+        state
+      }
+    }
+  }
+  protected def stop = this ! Terminate
+  protected def stopAndWait: MessageSelector[Unit] = {
+    stop
+    async { state =>
+      watch(process)
+      receive {
+        case ProcessExit(this.process) => ()
+      }
+    }
+  }
+
+  protected[this] def init: State @processCps
+  protected[this] override def body = stateRun(init)
+  protected[this] def stateRun(state: State): Unit @processCps = {
+    val newState = receive(handler(state))
+    if (newState.isDefined) stateRun(newState.get)
+    else noop
+  }
+  protected def handler(state: State): PartialFunction[Any,Option[State] @processCps] = {
+    case msg: ModifyStateMessage => Some(msg.execute(state))
+    case Terminate => termination(state); None
+  }
+  protected[this] def termination(state: State) = noop
+
+  protected[this] trait ModifyStateMessage {
+    def execute(state: State): State @processCps
+  }
 }
 

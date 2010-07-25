@@ -70,6 +70,9 @@ object Messages {
     def request: SenderAwareMessage
     def isReplyTo(request: SenderAwareMessage) = this.request eq request
   }
+  trait MessageWithSelectableReply[R] {
+    def sendAndSelect(to: Process): MessageSelector[R]
+  }
   
   /**
    * Use for request-reply style communication between two processes. Be careful not to use reply
@@ -85,8 +88,8 @@ object Messages {
    *        request.replyValue(a+b)
    *    }
    */
-  trait MessageWithSimpleReply[A] extends SenderAwareMessage {
-    def sendAndSelect(to: Process): MessageSelector[A] = {
+  trait MessageWithSimpleReply[A] extends SenderAwareMessage with MessageWithSelectableReply[A] {
+    override def sendAndSelect(to: Process): MessageSelector[A] = {
       to ! this
       //a bit complicated because guards won't work properly with cps
       val fun = new PartialFunction[Any,A @processCps] {
