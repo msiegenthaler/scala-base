@@ -31,7 +31,7 @@ trait StateServer extends Spawnable with Log with Process {
     this ! new ModifyStateMessage with MessageWithSimpleReply[R] {
       override def execute(state: State) = {
         val (v, s) = fun(state)
-        replyValue(v)
+        reply(v)
         s
       }
     }
@@ -40,7 +40,7 @@ trait StateServer extends Spawnable with Log with Process {
     this ! new ModifyStateMessage with MessageWithSimpleReply[R] {
       override def execute(state: State) = {
         val v = getter(state)
-        replyValue(v)
+        reply(v)
         state
       }
     }
@@ -50,7 +50,7 @@ trait StateServer extends Spawnable with Log with Process {
       override def execute(state: State) = {
         spawnChild(Required) {
           val r = fun(state)
-          replyValue(r)
+          reply(r)
         }
         state
       }

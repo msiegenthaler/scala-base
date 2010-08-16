@@ -74,7 +74,7 @@ object SpecifiedProcessManager {
         case Terminate => doStop(false)()
         case msg: StopManager =>
           doStop(msg.nice) {
-            msg.replyValue(())
+            msg.reply(())
           }
         case end: ProcessEnd =>
           if (end.process == managedProcess) {

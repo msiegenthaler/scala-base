@@ -2,6 +2,8 @@ package ch.inventsoft.scalabase.oip
 
 import ch.inventsoft.scalabase.process._
 import Messages._
+import ch.inventsoft.scalabase.executionqueue._
+import ExecutionQueues._
 
 
 /**
@@ -17,21 +19,27 @@ import Messages._
  * }
  */
 trait ConcurrentObject {
+  protected[this] def concurrentQueue: ExecutionQueue = execute
+  
   /** Doesn't do much except returning a MessageSelector instead of a "simple" value */
   protected[this] def replyInCallerProcess[A](fun: => A @processCps): MessageSelector[A] @processCps = {
     val token = RequestToken.create[A]
     token.reply(fun)
     token.select
   }
+
   /** Executes fun in a new process (spawnChild(Required)) */
-  protected[this] def concurrent(fun: => Unit @processCps): Unit @processCps = {
-    spawnChild(Required) { fun }
+  protected[this] def concurrent(fun: => Unit @processCps): Unit @processCps = concurrent(concurrentQueue)(fun)
+  protected[this] def concurrent(queue: ExecutionQueue)(fun: => Unit @processCps): Unit @processCps = {
+    spawnChildProcess(queue)(Required) { fun }
     noop
   }
+
   /** Executes fun in a new process (spawnChild(Required)) and returns a selector for the result */
-  protected[this] def concurrentWithReply[A](fun: => A @processCps): MessageSelector[A] @processCps = {
+  protected[this] def concurrentWithReply[A](fun: => A @processCps): MessageSelector[A] @processCps = concurrentWithReply(concurrentQueue)(fun)
+  protected[this] def concurrentWithReply[A](queue: ExecutionQueue)(fun: => A @processCps): MessageSelector[A] @processCps = {
     val token = RequestToken.create[A]
-    spawnChild(Required) {
+    spawnChildProcess(queue)(Required) {
       val result = fun
       token.reply(result)
     }
@@ -46,9 +54,10 @@ trait ConcurrentObject {
    *   reply(r)
    * }
    */
-  protected[this] def concurrentWithReplyFun[A](fun: (A => Unit) => Unit @processCps): MessageSelector[A] @processCps = {
+  protected[this] def concurrentWithReplyFun[A](fun: (A => Unit) => Unit @processCps): MessageSelector[A] @processCps = concurrentWithReplyFun(concurrentQueue)(fun)
+  protected[this] def concurrentWithReplyFun[A](queue: ExecutionQueue)(fun: (A => Unit) => Unit @processCps): MessageSelector[A] @processCps = {
     val token = RequestToken.create[A]
-    spawnChild(Required) {
+    spawnChildProcess(queue)(Required) {
       val result = fun(token.reply _)
     }
     token.select
