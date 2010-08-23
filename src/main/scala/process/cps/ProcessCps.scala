@@ -200,23 +200,30 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
     override def run(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler) = {
       val messageBox = state.messageBox
       class CaptureRegistrantWithin extends CaptureRegistrant(fun.isDefinedAt _, (s,m) => execNested(s,continue,flow)(fun(m)), flow) {
-        val timeoutTask = new java.util.TimerTask {
+        object TimeoutTask extends java.util.TimerTask {
+          private var canceled: Boolean = false
           override def run = handleTimeout
+          override def cancel = synchronized {
+            canceled = true
+            super.cancel
+          }
+          def isCancelled = synchronized(canceled)
         }
         val done = new java.util.concurrent.atomic.AtomicBoolean(false)
 
-        override def register(state: ProcessState) = {
+        override def register(state: ProcessState) = synchronized {
           val capture = createCapture(state)
           messageBox.setCapture(capture)
-          timer.schedule(timeoutTask, timeout.amountAs(Milliseconds))
+          if (!TimeoutTask.isCancelled)
+            timer.schedule(TimeoutTask, timeout.amountAs(Milliseconds))
         }
         override def reregisterCapture(state: ProcessState) = {
           val capture = createCapture(state)
           messageBox.setCapture(capture)
         }
-        protected override def execute(state: ProcessState, msg: Any) = {
+        protected override def execute(state: ProcessState, msg: Any) = synchronized {
           if (done.compareAndSet(false, true)) {
-            timeoutTask.cancel
+            TimeoutTask.cancel
             super.execute(state, msg)
           }
         }
