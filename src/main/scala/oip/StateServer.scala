@@ -58,9 +58,9 @@ trait StateServer extends Spawnable with Log with Process {
   }
   protected def stop = this ! Terminate
   protected def stopAndWait: MessageSelector[Unit] = {
-    stop
     async { state =>
       watch(process)
+      stop
       receive {
         case ProcessExit(this.process) => ()
       }
