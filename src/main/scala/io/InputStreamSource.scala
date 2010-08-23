@@ -36,7 +36,6 @@ trait InputStreamSource extends Source[Byte] with StateServer {
 
 
   override def read = get { _ =>
-    println("## "+bufferSize)
     val buffer = new Array[Byte](bufferSize)
     input.read(buffer) match {
       case -1 => EndOfData

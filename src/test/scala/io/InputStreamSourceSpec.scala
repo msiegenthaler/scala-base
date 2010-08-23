@@ -5,6 +5,7 @@ import matchers._
 import java.io._
 import ch.inventsoft.scalabase.oip._
 import ch.inventsoft.scalabase.process._
+import ch.inventsoft.scalabase.process.cps.CpsUtils._
 import ch.inventsoft.scalabase.time._
 
 
@@ -236,6 +237,69 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
         val cr = source.close.receiveOption(1 s)
         cr should be(Some(()))
         is.closed should be(true)
+      }
+    }
+    describe("huge source") {
+      class RandomInputStream extends InputStream {
+        private val random = new java.util.Random()
+        override def read = random.nextInt(256)
+        override def read(buffer: Array[Byte]) = {
+          random.nextBytes(buffer)
+          buffer.length
+        }
+        override def read(buffer: Array[Byte], offset: Int, length: Int) = {
+          val tmp = new Array[Byte](length)
+          random.nextBytes(tmp)
+          Array.copy(tmp, 0, buffer, offset, length)
+          length
+        }
+        override def skip(toSkip: Long) = toSkip
+        override def available = Int.MaxValue
+        override def close = ()
+      }
+
+      it_("should be possible to read 100Mb") {
+        val is = new RandomInputStream
+        val source = InputStreamSource(is, 1024)
+        
+        def readit(left: Int): Unit @processCps = {
+          if (left > 0) {
+            val read = source.read.receiveWithin(1 s)
+            read match {
+              case Data(data) =>
+                data.size should be(1024)
+                noop
+              case other =>
+                fail(""+other)
+            }
+            readit(left - 1)
+          } else ()
+        }
+
+        readit(100000) // 100'000 times 1Kb
+      }
+    }
+    describe("medium long") {
+      val string = "The foxy fox jumps the bandwagon in order to get on board the train and have a lot of fun, but then he looses its temper and bites the goose who was piloting the locomotive across the big blue sea"
+      val bytes = string.getBytes("UTF-8")
+      def readAll(source: Source[Byte], soFar: Seq[Byte] = Nil): Seq[Byte] @processCps = {
+        val read = source.read.receiveWithin(1 s)
+        read match {
+          case Data(data) =>
+            val nd = soFar ++ data
+            readAll(source, nd)
+          case EndOfData => 
+            noop
+            soFar
+        }
+      }
+      it_("should read a string of bytes no matter the buffer size") {
+        (1 to 1000).foreach_cps { bufferSize =>
+          val is = new ByteArrayInputStream(bytes)
+          val source = InputStreamSource(is, bufferSize)
+          val data = readAll(source)
+          data.toArray should be(bytes)
+        }
       }
     }
   }
