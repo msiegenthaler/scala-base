@@ -46,65 +46,21 @@ trait XmlChunker {
   def consumed: XmlChunker
 }
 object XmlChunker extends Log {
-  def apply(): XmlChunker = Initial(Nil)
-
-  private trait OutOfDataChunker extends XmlChunker {
-    override def root = None
-  }
-  private case class Initial(chunks: List[Iterable[Char]]) extends OutOfDataChunker {
-    override def push(data: Iterable[Char]) = {
-      val i = data.dropWhile(_ != '<')
-      if (i.isEmpty) this
-      else InHead(Nil, Nil).push(i)
-    }
-    override def consumed = copy(chunks = Nil)
-  }
-  private case class InHead(rootData: Iterable[Char], chunks: List[Iterable[Char]]) extends OutOfDataChunker {
-    override def push(data: Iterable[Char]) = {
-      val (h,t) = data.span(_ != '>')
-      val nd = rootData ++ h
-      if (t.nonEmpty) {
-        val tail = t.drop(1)
-        if (nd.nonEmpty) {
-          if (nd.last == '/') {
-            //closed again -> ignore
-            Initial(chunks).push(tail)
-          } else {
-            val elementData = nd ++ "/>"
-            val reader = new java.io.CharArrayReader(elementData.toArray)
-            try {
-              val xml = XML.load(reader)
-              LookingForElement(xml, chunks, Nil, 0).push(tail)
-            } catch {
-              case e: Exception =>
-                log.info("Invalid XML received: {}", e)
-              Initial(chunks).push(tail)
-            }
-          }
-        } else Initial(chunks).push(tail)
-      } else copy(rootData = nd)
-    }
-    override def consumed = copy(chunks = Nil)
-  }
+  def apply(depth: Int = 1): XmlChunker = LookingForElement(depth, None, Nil, Nil, 0)
 
   //TODO cdata handling
   //TODO max size of parsed stuff (1Mb or so): mostly collected and elementData
 
-  private trait InRoot extends XmlChunker {
-    val collected: Iterable[Char]
-    def rootElem: Elem
-    def root = Some(rootElem)
-  }
-  private case class LookingForElement(rootElem: Elem, chunks: List[Iterable[Char]], collected: Iterable[Char], depth: Int) extends InRoot {
+  private case class LookingForElement(rootDepth: Int, root: Option[Elem], chunks: List[Iterable[Char]], collected: Iterable[Char], depth: Int) extends XmlChunker {
     override def push(data: Iterable[Char]) = {
       val (h,t) = data.span(_ != '<')
       val nc = collected ++ h
-      if (t.nonEmpty) InElementTag(rootElem, chunks, nc, depth, Nil).push(t)
+      if (t.nonEmpty) InElementTag(rootDepth, root, chunks, nc, depth, Nil).push(t)
       else copy(collected = nc)
     }
     override def consumed = copy(chunks=Nil)
   }
-  private case class InElementTag(rootElem: Elem, chunks: List[Iterable[Char]], collected: Iterable[Char], depth: Int, elementData: Iterable[Char]) extends InRoot {
+  private case class InElementTag(rootDepth: Int, root: Option[Elem], chunks: List[Iterable[Char]], collected: Iterable[Char], depth: Int, elementData: Iterable[Char]) extends XmlChunker {
     override def push(data: Iterable[Char]) = {
       val (h,t) = data.span(_ != '>')
       if (t.nonEmpty) {
@@ -114,19 +70,32 @@ object XmlChunker extends Log {
         if (tag.drop(1).head == '/') {
           //Close of element
           val next: XmlChunker = {
-            if (depth==0) Initial(chunks)
-            else if (depth == 1) {
+            if (depth <= rootDepth) LookingForElement(rootDepth, None, chunks, Nil, (depth-1).max(0))
+            else if (depth==rootDepth+1) {
               val newChunks = if (chunk.isEmpty) chunks else chunk :: chunks
-              LookingForElement(rootElem, newChunks, Nil, 0)
-            } else LookingForElement(rootElem, chunks, chunk, depth-1)
+              LookingForElement(rootDepth, root, newChunks, Nil, depth-1)
+            } else LookingForElement(rootDepth, root, chunks, chunk, depth-1)
           }
           next.push(tail)
         } else {
           //Open of element
           if (tag.takeRight(2).head == '/') {
-            if (depth==0) LookingForElement(rootElem, chunk :: chunks, Nil, 0).push(tail)
-            else LookingForElement(rootElem, chunks, chunk, depth).push(tail)
-          } else LookingForElement(rootElem, chunks, chunk, depth+1).push(tail)
+            if (depth==rootDepth) LookingForElement(rootDepth, root, chunk :: chunks, Nil, depth).push(tail)
+            else LookingForElement(rootDepth, root, chunks, chunk, depth).push(tail)
+          } else {
+            if (depth<rootDepth) {
+              val elementData = tag.dropRight(1) ++ "/>"
+              val reader = new java.io.CharArrayReader(elementData.toArray)
+              try {
+                val xml = XML.load(reader)
+                LookingForElement(rootDepth, Some(xml), chunks, Nil, depth+1).push(tail)
+              } catch {
+                case e: Exception =>
+                  log.info("Invalid XML received (possible root): {}", e)
+                  LookingForElement(rootDepth, None, chunks, Nil, depth).push(tail)
+              }
+            } else LookingForElement(rootDepth, root, chunks, chunk, depth+1).push(tail)
+          }
         }
       } else copy(elementData = elementData ++ h)
     }

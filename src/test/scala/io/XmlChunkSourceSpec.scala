@@ -110,6 +110,23 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
       c.chunksAsString should be("<bla>my<value>content</value> is <b><i>test</i></b></bla>" :: Nil)
       c.insideXml should be(true)
     }
+
+    it("should also work with a depth of two (simple)") {
+      val c = XmlChunker(2) + """<root><group id="a"><value>asdad</value><value/></group><group id="b"><name>Mario</name><age>29</age></group></root>"""
+      c.chunksAsString should be("<age>29</age>" :: "<name>Mario</name>" :: "<value/>" :: "<value>asdad</value>" :: Nil)
+      c.insideXml should be(false)
+    }
+    it("should also work with a depth of two with a inline closed element") {
+      val c = XmlChunker(2) + """<root><group id="a"><value>asdad</value><value/></group><group bla="bla"/><group id="b"><name>Mario</name><age>29</age></group></root>"""
+      c.chunksAsString should be("<age>29</age>" :: "<name>Mario</name>" :: "<value/>" :: "<value>asdad</value>" :: Nil)
+      c.insideXml should be(false)
+    }
+    it("should have the second-level elements as roots with a depth of two") {
+      val c = XmlChunker(2) + """<root><group id="a"><value>asdad</value><value/>"""
+      c.chunksAsString should be("<value/>" :: "<value>asdad</value>" :: Nil)
+      c.insideXml should be(true)
+      c.root should be(Some(<group id="a"/>))
+    }
   }
 
 
