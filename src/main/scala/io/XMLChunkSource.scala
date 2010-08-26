@@ -50,7 +50,7 @@ trait XmlChunk {
       val str = new StringBuilder(nsdecls.length+content.length+8).append("<a").append(nsdecls).append(">").appendAll(content).append("</a>")
       val reader = new java.io.StringReader(str.toString)
       val elem = XML.load(reader)
-      elem.child.headOption.asInstanceOf[Option[Elem]]
+      elem.child.filter(_.isInstanceOf[Elem]).headOption.asInstanceOf[Option[Elem]]
     } catch {
       case e: Exception => None
     }

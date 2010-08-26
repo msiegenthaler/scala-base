@@ -251,6 +251,41 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
       chunk3.string should be("<c a=\"b\">hi</c>")
       chunk3.context should be(None)
     }
+
+
+    it("should support xmpp (example1)") {
+      val string = """<?xml version='1.0'?>
+      <stream:stream
+          to='example.com'
+          xmlns='jabber:client'
+          xmlns:stream='http://etherx.jabber.org/streams'
+          version='1.0'>
+         <message from='juliet@example.com'
+                   to='romeo@example.net'
+                   xml:lang='en'>
+           <body>Art thou not Romeo, and a Montague?</body>
+         </message>
+         <message from='romeo@example.net'
+                   to='juliet@example.com'
+                   xml:lang='en'>
+          <body>Neither, fair saint, if either thee dislike.</body>
+        </message>
+      </stream:stream>"""
+      
+      val c = XmlChunker(1) + string
+      c.chunks.size should be(2)
+      val chunk1 :: chunk2 :: Nil = c.chunks
+      chunk1.xml should be(Some(<message from='juliet@example.com'
+                   to='romeo@example.net'
+                   xml:lang='en'>
+           <body>Art thou not Romeo, and a Montague?</body>
+         </message>))
+      chunk2.xml should be(Some(<message from='romeo@example.net'
+                   to='juliet@example.com'
+                   xml:lang='en'>
+          <body>Neither, fair saint, if either thee dislike.</body>
+        </message>))
+    }
   }
 
 
