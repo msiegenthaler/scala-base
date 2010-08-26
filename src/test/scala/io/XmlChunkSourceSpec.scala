@@ -272,19 +272,29 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
         </message>
       </stream:stream>"""
       
-      val c = XmlChunker(1) + string
-      c.chunks.size should be(2)
-      val chunk1 :: chunk2 :: Nil = c.chunks
-      chunk1.xml should be(Some(<message from='juliet@example.com'
+      (1 to string.length).foreach { i =>
+        val c = feedChunker(XmlChunker(1), string, i)
+        c.chunks.size should be(2)
+        val chunk1 :: chunk2 :: Nil = c.chunks
+        chunk1.xml should be(Some(<message from='juliet@example.com'
                    to='romeo@example.net'
                    xml:lang='en'>
            <body>Art thou not Romeo, and a Montague?</body>
          </message>))
-      chunk2.xml should be(Some(<message from='romeo@example.net'
+        chunk2.xml should be(Some(<message from='romeo@example.net'
                    to='juliet@example.com'
                    xml:lang='en'>
           <body>Neither, fair saint, if either thee dislike.</body>
         </message>))
+      }
+    }
+
+    def feedChunker(chunker: XmlChunker, rest: Iterable[Char], fragmentSize: Int): XmlChunker = {
+      if (rest.size <= fragmentSize) chunker + rest
+      else {
+        val (h,t) = rest.splitAt(fragmentSize)
+        feedChunker(chunker + h, t, fragmentSize)
+      }
     }
   }
 
