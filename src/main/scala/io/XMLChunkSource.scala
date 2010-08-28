@@ -1,6 +1,7 @@
 package ch.inventsoft.scalabase.io
 
-import java.nio.charset.Charset
+import java.nio.{ByteBuffer,CharBuffer}
+import java.nio.charset._
 import ch.inventsoft.scalabase.log._
 import scala.xml._
 import ch.inventsoft.scalabase.process._
@@ -14,19 +15,13 @@ import ch.inventsoft.scalabase.time._
  * @see XmlChunker
  */
 object XmlChunkSource extends SpawnableCompanion[Source[Elem] with Spawnable] {
-  def fromBytes(source: Source[Byte], encoding: Charset, nodeDepth: Int = 1, as: SpawnStrategy = SpawnAsRequiredChild) = {
-/*
-    val xmlSource = new XmlChunkSource {
-      override protected type NT = Byte
-      override protected val underlying = source
+  def fromBytes(byteSource: Source[Byte], encoding: Charset, nodeDepth: Int = 1, as: SpawnStrategy = SpawnAsRequiredChild) = {
+    val xmlSource = new ByteXmlChunkSource {
+      override protected val source = byteSource
       override protected val depth = nodeDepth
-      override protected def readFromUnderlying = {
-        val data = source.read.receive
-        //TODO map
-        null
-      }
+      override protected val charset = encoding
     }
-    start(as)(xmlSource)*/
+    start(as)(xmlSource)
   }
   def fromChars(charSource: Source[Char], nodeDepth: Int = 1, as: SpawnStrategy = SpawnAsRequiredChild) = {
     val xmlSource = new CharXmlChunkSource {
@@ -36,6 +31,74 @@ object XmlChunkSource extends SpawnableCompanion[Source[Elem] with Spawnable] {
     start(as)(xmlSource)
   }
 
+  private trait ByteXmlChunkSource extends Source[Elem] with StateServer {
+    protected val depth: Int
+    protected val source: Source[Byte]
+    protected val charset: Charset
+    protected val closeTimeout = 20 s
+    protected[this] override type State = ByteParseState
+
+    protected[this] override def init = ByteParseState(charset.newDecoder, XmlChunker(depth))
+    protected[this] override def termination(state: State) = source.close.receiveWithin(closeTimeout)
+
+    override def read = call(nextChunks(_))
+    protected[this] def nextChunks(state: State): (Read[Elem],State) @processCps = {
+      def decode(bytes: Iterable[Byte]) = {
+        def decode_(in: ByteBuffer, soFar: Iterable[Char]): Iterable[Char] = {
+          val outEstimatedSize: Int = (in.remaining*state.decoder.averageCharsPerByte).round max 2
+          val out = CharBuffer.allocate(outEstimatedSize)
+          state.decoder.decode(in, out, false) match {
+            case CoderResult.UNDERFLOW => 
+              out.flip
+              soFar ++ new CharBufferSeq(out)
+            case CoderResult.OVERFLOW =>
+              out.flip
+              decode_(in, soFar ++ new CharBufferSeq(out))
+            case other => //error
+              out.flip
+              decode_(in, soFar ++ new CharBufferSeq(out))
+          }
+        }
+        val in = ByteBuffer.wrap(bytes.toArray)
+        decode_(in, Nil)
+      }
+
+      val data = readFromUnderlying
+      data match {
+        case Data(bytes) =>
+          val chars = decode(bytes)
+          val newchunker = state.chunker + chars
+          val xmlChunks = newchunker.chunks.map(_.xml).filterNot(_ == None).map(_.get)
+          val chunker2 = newchunker.consumeAll
+          if (xmlChunks.isEmpty) {
+            nextChunks(state.copy(chunker=chunker2))
+          } else {
+            noop; (Data(xmlChunks), state.copy(chunker=chunker2))
+          }
+        case EndOfData => noop
+          state.decoder.reset
+          (EndOfData, state)
+      }
+    }
+    protected[this] def readFromUnderlying = source.read.receive
+    
+    override def close = stopAndWait    
+  }
+  private case class ByteParseState(decoder: CharsetDecoder, chunker: XmlChunker)
+  private class CharBufferSeq(buffer: CharBuffer) extends scala.collection.Seq[Char] {
+    override def apply(index: Int) = buffer.charAt(index)
+    override def length = buffer.remaining
+    override def iterator = new Iterator[Char] {
+      private var pos = 0
+      override def hasNext = pos < buffer.remaining
+      override def next = {
+        val value = apply(pos)
+        pos = pos + 1
+        value
+      }
+    }
+  }
+
   private trait CharXmlChunkSource extends Source[Elem] with StateServer {
     protected val depth: Int
     protected val source: Source[Char]
@@ -43,9 +106,7 @@ object XmlChunkSource extends SpawnableCompanion[Source[Elem] with Spawnable] {
     protected[this] override type State = XmlChunker
     
     protected[this] override def init = XmlChunker(depth)
-    protected[this] override def termination(state: State) = {
-      source.close.receiveWithin(closeTimeout)
-    }
+    protected[this] override def termination(state: State) = source.close.receiveWithin(closeTimeout)
 
     override def read = call(nextChunks(_))
     protected[this] def nextChunks(chunker: XmlChunker): (Read[Elem],XmlChunker) @processCps = {
