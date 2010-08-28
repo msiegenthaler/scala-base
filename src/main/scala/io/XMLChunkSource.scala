@@ -1,24 +1,74 @@
 package ch.inventsoft.scalabase.io
 
+import java.nio.charset.Charset
 import ch.inventsoft.scalabase.log._
 import scala.xml._
+import ch.inventsoft.scalabase.process._
+import ch.inventsoft.scalabase.oip._
+import ch.inventsoft.scalabase.time._
 
-object XmlChunkSource {
-}
+
+/**
+ * Source that reads an xml-byte/charstream and emmits xml. The xml is chunked at a defined depth
+ * (default is 1). Usefull i.e. for XMPP communication.
+ * @see XmlChunker
+ */
+object XmlChunkSource extends SpawnableCompanion[Source[Elem] with Spawnable] {
+  def fromBytes(source: Source[Byte], encoding: Charset, nodeDepth: Int = 1, as: SpawnStrategy = SpawnAsRequiredChild) = {
 /*
-trait XmlChunkSource extends Source[Elem] {
-  val maxChunkSize = 1024*1024L // 1Mb
-  val source: Source[Byte]
-
-  override def read = {
-    
+    val xmlSource = new XmlChunkSource {
+      override protected type NT = Byte
+      override protected val underlying = source
+      override protected val depth = nodeDepth
+      override protected def readFromUnderlying = {
+        val data = source.read.receive
+        //TODO map
+        null
+      }
+    }
+    start(as)(xmlSource)*/
+  }
+  def fromChars(charSource: Source[Char], nodeDepth: Int = 1, as: SpawnStrategy = SpawnAsRequiredChild) = {
+    val xmlSource = new CharXmlChunkSource {
+      override protected val source = charSource
+      override protected val depth = nodeDepth
+    }
+    start(as)(xmlSource)
   }
 
-  override def close = {
-    //TODO
+  private trait CharXmlChunkSource extends Source[Elem] with StateServer {
+    protected val depth: Int
+    protected val source: Source[Char]
+    protected val closeTimeout = 20 s
+    protected[this] override type State = XmlChunker
+    
+    protected[this] override def init = XmlChunker(depth)
+    protected[this] override def termination(state: State) = {
+      source.close.receiveWithin(closeTimeout)
+    }
+
+    override def read = call(nextChunks(_))
+    protected[this] def nextChunks(chunker: XmlChunker): (Read[Elem],XmlChunker) @processCps = {
+      val data = readFromUnderlying
+      data match {
+        case Data(items) =>
+          val newchunker = chunker + items
+          val xmlChunks = newchunker.chunks.map(_.xml).filterNot(_ == None).map(_.get)
+          val chunker2 = newchunker.consumeAll
+          if (xmlChunks.isEmpty) {
+            nextChunks(chunker2)
+          } else {
+            noop; (Data(xmlChunks), chunker2)
+          }
+        case EndOfData =>
+          noop; (EndOfData, chunker)
+      }
+    }
+    protected[this] def readFromUnderlying = source.read.receive
+    
+    override def close = stopAndWait
   }
 }
-*/
 
 /**
  * Splits XML into chunks on the first level.

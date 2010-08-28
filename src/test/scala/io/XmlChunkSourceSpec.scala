@@ -254,7 +254,82 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
 
 
     it("should support xmpp (example1)") {
-      val string = """<?xml version='1.0'?>
+      val string = XmppExample1.string
+      (1 to string.length).foreach { i =>
+        val c = feedChunker(XmlChunker(1), string, i)
+        c.chunks.size should be(2)
+        val chunk1 :: chunk2 :: Nil = c.chunks
+        chunk1.xml should be(Some(XmppExample1.msg1))
+        chunk2.xml should be(Some(XmppExample1.msg2))
+      }
+    }
+
+    def feedChunker(chunker: XmlChunker, rest: Iterable[Char], fragmentSize: Int): XmlChunker = {
+      if (rest.size <= fragmentSize) chunker + rest
+      else {
+        val (h,t) = rest.splitAt(fragmentSize)
+        feedChunker(chunker + h, t, fragmentSize)
+      }
+    }
+  }
+
+  describe("XmlChunkSource") {
+    describe("from chars") {
+      it_("should parse the xmpp example1 successfully in two reads") {
+        val charSource = FromStringSource(XmppExample1.string)
+        val source = XmlChunkSource.fromChars(charSource)
+        val read = collectAll(source)
+        read.length should be(2)
+        val read1 :: read2 :: Nil = read
+        read1.items.size should be(1)
+        read1.items.head should be(XmppExample1.msg1)
+        read2.items.size should be(1)
+        read2.items.head should be(XmppExample1.msg2)
+        source.close.receive
+      }
+      it_("should parse the xmpp example1 no matter which readPerRequest value is used") {
+        val toRead = XmppExample1.string
+        (1 to (toRead.size*2)).foreach_cps { readPerRequest =>
+          val source = XmlChunkSource.fromChars(FromStringSource(toRead, readPerRequest))
+          val chunks = collectAll(source).flatMap(_.items).toList
+          chunks.size should be(2)
+          chunks(0) should be(XmppExample1.msg1)
+          chunks(1) should be(XmppExample1.msg2)
+          source.close.receive
+        }
+      }
+    }
+  }
+
+  def collectAll[A](source: Source[A], soFar: List[Data[A]] = Nil): List[Data[A]] @processCps = {
+    val read = source.read.receiveWithin(10 s)
+    read match {
+      case data: Data[A] =>
+        data.items.nonEmpty should be(true)
+        collectAll(source, data :: soFar)
+      case EndOfData => noop; soFar.reverse
+    }
+  }
+  class FromStringSource(data: String, readPerRequest: Int = 10) extends Source[Char] with StateServer {
+    override type State = Seq[Char]
+    override def init = new scala.collection.immutable.WrappedString(data)
+    override def read = call { left =>
+      if (left.isEmpty) (EndOfData, left)
+      else if (left.length > readPerRequest) {
+        val (h,t) = left.splitAt(readPerRequest)
+        (Data(h), t)
+      } else (Data(left), Nil)
+    }
+    override def close = stopAndWait
+  }
+  object FromStringSource extends SpawnableCompanion[FromStringSource] {
+    def apply(string: String, perRequest: Int = 10) =
+      start(SpawnAsRequiredChild)(new FromStringSource(string, perRequest))
+  }
+
+
+  object XmppExample1 {
+    val string = """<?xml version='1.0'?>
       <stream:stream
           to='example.com'
           xmlns='jabber:client'
@@ -271,32 +346,16 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
           <body>Neither, fair saint, if either thee dislike.</body>
         </message>
       </stream:stream>"""
-      
-      (1 to string.length).foreach { i =>
-        val c = feedChunker(XmlChunker(1), string, i)
-        c.chunks.size should be(2)
-        val chunk1 :: chunk2 :: Nil = c.chunks
-        chunk1.xml should be(Some(<message from='juliet@example.com'
+    val msg1 = <message from='juliet@example.com'
                    to='romeo@example.net'
                    xml:lang='en'>
            <body>Art thou not Romeo, and a Montague?</body>
-         </message>))
-        chunk2.xml should be(Some(<message from='romeo@example.net'
+         </message>
+    val msg2 = <message from='romeo@example.net'
                    to='juliet@example.com'
                    xml:lang='en'>
           <body>Neither, fair saint, if either thee dislike.</body>
-        </message>))
-      }
-    }
-
-    def feedChunker(chunker: XmlChunker, rest: Iterable[Char], fragmentSize: Int): XmlChunker = {
-      if (rest.size <= fragmentSize) chunker + rest
-      else {
-        val (h,t) = rest.splitAt(fragmentSize)
-        feedChunker(chunker + h, t, fragmentSize)
-      }
-    }
+        </message>
   }
-
 
 }
