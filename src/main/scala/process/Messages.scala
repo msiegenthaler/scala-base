@@ -31,6 +31,14 @@ object Messages {
     def receive = ch.inventsoft.scalabase.process.receive(this)
     def receiveWithin(timeout: Duration) = ch.inventsoft.scalabase.process.receiveWithin(timeout)(this)
     def receiveOption(timeout: Duration) = option.receiveWithin(timeout)
+    def await: Unit @processCps = {
+      receive
+      noop
+    }
+    def await(timeout: Duration): Unit @processCps = {
+      receiveWithin(timeout)
+      noop
+    }
 
     def option = map(Some(_)).or {
       case Timeout => None
