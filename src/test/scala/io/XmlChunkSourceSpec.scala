@@ -299,12 +299,23 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
           source.close.receive
         }
       }
+      it_("should be possible to have it return 'rooted' elems") {
+        val charSource = CharsFromStringSource(XmppExample1.string)
+        val source = XmlChunkSource.fromChars(charSource=charSource, chunkFun=XmlChunkSource.rootedChunks _)
+        val read = collectAll(source)
+        read.length should be(2)
+        val read1 :: read2 :: Nil = read
+        read1.items.size should be(1)
+        read1.items.head.toString should be("""<stream:stream version="1.0" to="example.com" xmlns:stream="http://etherx.jabber.org/streams" xmlns="jabber:client"><message xml:lang="en" to="romeo@example.net" from="juliet@example.com">
+           <body>Art thou not Romeo, and a Montague?</body>
+         </message></stream:stream>""")
+      }
     }
     describe("from bytes") {
       val encoding = Charset.forName("UTF-8")
       it_("should parse the xmpp example1 successfully in two reads") {
-        val charSource = BytesFromStringSource(XmppExample1.string)
-        val source = XmlChunkSource.fromBytes(charSource, encoding)
+        val bytesSource = BytesFromStringSource(XmppExample1.string)
+        val source = XmlChunkSource.fromBytes(bytesSource, encoding)
         val read = collectAll(source)
         read.length should be(2)
         val read1 :: read2 :: Nil = read
@@ -324,6 +335,17 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
           chunks(1) should be(XmppExample1.msg2)
           source.close.receive
         }
+      }
+      it_("should be possible to have it return 'rooted' elems") {
+        val bytesSource = BytesFromStringSource(XmppExample1.string)
+        val source = XmlChunkSource.fromBytes(byteSource=bytesSource, encoding=encoding, chunkFun=XmlChunkSource.rootedChunks _)
+        val read = collectAll(source)
+        read.length should be(2)
+        val read1 :: read2 :: Nil = read
+        read1.items.size should be(1)
+        read1.items.head.toString should be("""<stream:stream version="1.0" to="example.com" xmlns:stream="http://etherx.jabber.org/streams" xmlns="jabber:client"><message xml:lang="en" to="romeo@example.net" from="juliet@example.com">
+           <body>Art thou not Romeo, and a Montague?</body>
+         </message></stream:stream>""")
       }
     }
   }

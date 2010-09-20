@@ -15,18 +15,27 @@ import ch.inventsoft.scalabase.time._
  * @see XmlChunker
  */
 object XmlChunkSource extends SpawnableCompanion[Source[Elem] with Spawnable] {
-  def fromBytes(byteSource: Source[Byte], encoding: Charset, nodeDepth: Int = 1, as: SpawnStrategy = SpawnAsRequiredChild) = {
+  type ChunkFun = XmlChunk => Option[Elem]
+  def returnChunksOnly(chunk: XmlChunk) =  chunk.xml
+  def rootedChunks(chunk: XmlChunk) = chunk.xmlNoContext flatMap { xml => chunk.context.map { context =>
+    val nc = context.child ++ xml
+    context.copy(child=nc)
+  }}
+
+  def fromBytes(byteSource: Source[Byte], encoding: Charset, nodeDepth: Int = 1, chunkFun: ChunkFun = returnChunksOnly _, as: SpawnStrategy = SpawnAsRequiredChild) = {
     val xmlSource = new ByteXmlChunkSource {
       override protected val source = byteSource
       override protected val depth = nodeDepth
       override protected val charset = encoding
+      override protected def mapFun(chunk: XmlChunk) = chunkFun(chunk)
     }
     start(as)(xmlSource)
   }
-  def fromChars(charSource: Source[Char], nodeDepth: Int = 1, as: SpawnStrategy = SpawnAsRequiredChild) = {
+  def fromChars(charSource: Source[Char], nodeDepth: Int = 1, chunkFun: ChunkFun = returnChunksOnly _, as: SpawnStrategy = SpawnAsRequiredChild) = {
     val xmlSource = new CharXmlChunkSource {
       override protected val source = charSource
       override protected val depth = nodeDepth
+      override protected def mapFun(chunk: XmlChunk) = chunkFun(chunk)
     }
     start(as)(xmlSource)
   }
@@ -36,6 +45,7 @@ object XmlChunkSource extends SpawnableCompanion[Source[Elem] with Spawnable] {
     protected val source: Source[Byte]
     protected val charset: Charset
     protected val closeTimeout = 20 s
+    protected def mapFun(chunk: XmlChunk): Option[Elem]
     protected[this] override type State = ByteParseState
 
     protected[this] override def init = ByteParseState(charset.newDecoder, XmlChunker(depth))
@@ -68,7 +78,7 @@ object XmlChunkSource extends SpawnableCompanion[Source[Elem] with Spawnable] {
         case Data(bytes) =>
           val chars = decode(bytes)
           val newchunker = state.chunker + chars
-          val xmlChunks = newchunker.chunks.map(_.xml).filterNot(_ == None).map(_.get)
+          val xmlChunks = newchunker.chunks.map(mapFun _).filter(_.isDefined).map(_.get)
           val chunker2 = newchunker.consumeAll
           if (xmlChunks.isEmpty) {
             nextChunks(state.copy(chunker=chunker2))
@@ -103,6 +113,7 @@ object XmlChunkSource extends SpawnableCompanion[Source[Elem] with Spawnable] {
     protected val depth: Int
     protected val source: Source[Char]
     protected val closeTimeout = 20 s
+    protected def mapFun(chunk: XmlChunk): Option[Elem]
     protected[this] override type State = XmlChunker
     
     protected[this] override def init = XmlChunker(depth)
@@ -114,7 +125,7 @@ object XmlChunkSource extends SpawnableCompanion[Source[Elem] with Spawnable] {
       data match {
         case Data(items) =>
           val newchunker = chunker + items
-          val xmlChunks = newchunker.chunks.map(_.xml).filterNot(_ == None).map(_.get)
+          val xmlChunks = newchunker.chunks.map(mapFun _).filter(_.isDefined).map(_.get)
           val chunker2 = newchunker.consumeAll
           if (xmlChunks.isEmpty) {
             nextChunks(chunker2)
@@ -153,7 +164,7 @@ trait XmlChunk {
   /** the content of this chunk as character array */
   def chars: Iterable[Char]
   def string = new String(chars.toArray)
-  /** this chunk as xml-data (if parsable) */
+  /** this chunk as xml-data (if parsable), including the namespaces from the context */
   lazy val xml: Option[Elem] = {
     try {
       val content = chars.toArray
@@ -162,6 +173,15 @@ trait XmlChunk {
       val reader = new java.io.StringReader(str.toString)
       val elem = XML.load(reader)
       elem.child.filter(_.isInstanceOf[Elem]).headOption.asInstanceOf[Option[Elem]]
+    } catch {
+      case e: Exception => None
+    }
+  }
+  def xmlNoContext: Option[Elem] = {
+    try {
+      val reader = new java.io.StringReader(string)
+      val elem = XML.load(reader)
+      Some(elem)
     } catch {
       case e: Exception => None
     }
