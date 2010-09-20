@@ -430,7 +430,7 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
       }
     }
   }
-/*
+
   describe("XmlChunkSource") {
     describe("from chars") {
       it_("should parse the xmpp example1 successfully in two reads") {
@@ -505,7 +505,7 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
          </message></stream:stream>""")
       }
     }
-  }*/
+  }
 
   def collectAll[A](source: Source[A], soFar: List[Data[A]] = Nil): List[Data[A]] @processCps = {
     val read = source.read.receiveWithin(10 s)
