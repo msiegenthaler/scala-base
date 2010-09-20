@@ -253,6 +253,151 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
       chunk3.context should be(None)
     }
 
+    it("should ignore text before chunks") {
+      val c = XmlChunker() + "<root>huhu it's fun<a>some text</a>"
+      val (Some(e),nc) = c.consumeChunk
+      e.string should be("<a>some text</a>")
+      e.context should be(Some(<root/>))
+      nc.hasChunks should be(false)
+    }
+    it("should ignore text after chunks") {
+      val c = XmlChunker() + "<root><a>some text</a>huhu it's fun"
+      val (Some(e),nc) = c.consumeChunk
+      e.string should be("<a>some text</a>")
+      e.context should be(Some(<root/>))
+      nc.hasChunks should be(false)
+    }
+    it("should ignore text after chunks when root closed") {
+      val c = XmlChunker() + "<root><a>some text</a>huhu it's fun</root>"
+      val (Some(e),nc) = c.consumeChunk
+      e.string should be("<a>some text</a>")
+      e.context should be(Some(<root/>))
+      nc.hasChunks should be(false)
+    }
+
+    it("should support basic CDATA inside chunks") {
+      val c = XmlChunker() + "<root><a>some text <![CDATA[hi there]]></a>"
+      val (Some(e),nc) = c.consumeChunk
+      e.string should be("<a>some text <![CDATA[hi there]]></a>")
+      e.context should be(Some(<root/>))
+      nc.hasChunks should be(false)
+    }
+    it("should support CDATA with balanced elements inside chunks") {
+      val c = XmlChunker() + "<root><a>some text <![CDATA[hi <b>there</b>]]></a>"
+      val (Some(e),nc) = c.consumeChunk
+      e.string should be("<a>some text <![CDATA[hi <b>there</b>]]></a>")
+      e.context should be(Some(<root/>))
+      nc.hasChunks should be(false)
+    }
+    it("should support CDATA with other balanced elements inside chunks") {
+      val c = XmlChunker() + "<root><a>some text <![CDATA[hi <b>there</b>, is it fun?]]></a>"
+      val (Some(e),nc) = c.consumeChunk
+      e.string should be("<a>some text <![CDATA[hi <b>there</b>, is it fun?]]></a>")
+      e.context should be(Some(<root/>))
+      nc.hasChunks should be(false)
+    }
+    it("should support CDATA with unbalanced elements inside chunks") {
+      val c = XmlChunker() + "<root><a>some text <![CDATA[hi there<br>is it fun?]]></a>"
+      val (Some(e),nc) = c.consumeChunk
+      e.string should be("<a>some text <![CDATA[hi there<br>is it fun?]]></a>")
+      e.context should be(Some(<root/>))
+      nc.hasChunks should be(false)
+    }
+    it("should support CDATA with multiple unbalanced elements inside chunks") {
+      val c = XmlChunker() + "<root><a>some text <![CDATA[hi <b>there<br>is it <a>fun?]]></a>"
+      val (Some(e),nc) = c.consumeChunk
+      e.string should be("<a>some text <![CDATA[hi <b>there<br>is it <a>fun?]]></a>")
+      e.context should be(Some(<root/>))
+      nc.hasChunks should be(false)
+    }
+    it("should support CDATA with unbalanced elements nested inside chunks") {
+      val c = XmlChunker() + "<root><a>hi<b>some text <![CDATA[hi there<br>is it fun?]]></b></a>"
+      val (Some(e),nc) = c.consumeChunk
+      e.string should be("<a>hi<b>some text <![CDATA[hi there<br>is it fun?]]></b></a>")
+      e.context should be(Some(<root/>))
+      nc.hasChunks should be(false)
+    }
+    it("should support CDATA ending with unbalanced elements inside chunks") {
+      val c = XmlChunker() + "<root><a>some text <![CDATA[hi there<br>]]></a>"
+      val (Some(e),nc) = c.consumeChunk
+      e.string should be("<a>some text <![CDATA[hi there<br>]]></a>")
+      e.context should be(Some(<root/>))
+      nc.hasChunks should be(false)
+    }
+    it("should support CDATA with balanced elements inside root") {
+      val c = XmlChunker() + "<root><![CDATA[hi there <b>Mario</b>!]]><a>some text</a>"
+      val (Some(e),nc) = c.consumeChunk
+      e.string should be("<a>some text</a>")
+      e.context should be(Some(<root/>))
+      nc.hasChunks should be(false)
+    }
+    it("should support CDATA ending with balanced elements inside root") {
+      val c = XmlChunker() + "<root><![CDATA[hi there <b>Mario</b>]]><a>some text</a>"
+      val (Some(e),nc) = c.consumeChunk
+      e.string should be("<a>some text</a>")
+      e.context should be(Some(<root/>))
+      nc.hasChunks should be(false)
+    }
+    it("should support CDATA with unbalanced elements inside root") {
+      val c = XmlChunker() + "<root><![CDATA[hi there<br>Mario]]><a>some text</a>"
+      val (Some(e),nc) = c.consumeChunk
+      e.string should be("<a>some text</a>")
+      e.context should be(Some(<root/>))
+      nc.hasChunks should be(false)
+    }
+    it("should support CDATA ending with unbalanced elements inside root") {
+      val c = XmlChunker() + "<root><![CDATA[hi there<br>]]><a>some text</a>"
+      val (Some(e),nc) = c.consumeChunk
+      e.string should be("<a>some text</a>")
+      e.context should be(Some(<root/>))
+      nc.hasChunks should be(false)
+    }
+    it("should support empty CDATA inside root") {
+      val c = XmlChunker() + "<root><![CDATA[]]><a>some text</a>"
+      val (Some(e),nc) = c.consumeChunk
+      e.string should be("<a>some text</a>")
+      e.context should be(Some(<root/>))
+      nc.hasChunks should be(false)
+    }
+    it("should support empty CDATA inside element") {
+      val c = XmlChunker() + "<root><a>some<![CDATA[]]> text</a>"
+      val (Some(e),nc) = c.consumeChunk
+      e.string should be("<a>some<![CDATA[]]> text</a>")
+      e.context should be(Some(<root/>))
+      nc.hasChunks should be(false)
+    }
+    it("should support CDATA with all push sizes") {
+      (1 to 100).foreach { i =>
+        val text = "<root><![CDATA[hi there<br>]]><a><![CDATA[some<a> and not <b>]]> text</a>"
+        val c = feedChunker(XmlChunker(), text, i)
+        val (Some(e),nc) = c.consumeChunk
+        e.string should be("<a><![CDATA[some<a> and not <b>]]> text</a>")
+        e.context should be(Some(<root/>))
+        nc.hasChunks should be(false)
+      }
+    }
+    it("should not return duplicates when chunks are consumed while chunker is inside a CData") {
+      val c1 = XmlChunker() + "<root><a/><b><![CDATA[hi"
+      val (Some(e1), c2) = c1.consumeChunk
+      e1.string should be("<a/>")
+      c2.hasChunks should be(false)
+      
+      val c3 = c2 + "]]> there</b>"
+      val (Some(e2), c4) = c3.consumeChunk
+      e2.string should be("<b><![CDATA[hi]]> there</b>")
+      c4.hasChunks should be(false)
+    }
+    it("should return the proper chunks no matter where they are consumed") {
+      (1 to 100).foreach { i =>
+        val text = "<root><![CDATA[hi there<br>]]><a><![CDATA[some<a> and not <b>]]> text</a>"
+        val (c, chunks) = feedAndConsume(XmlChunker(), text, i)
+        c.hasChunks should be(false)
+        chunks.size should be(1)
+        val e :: Nil = chunks
+        e.string should be("<a><![CDATA[some<a> and not <b>]]> text</a>")
+        e.context should be(Some(<root/>))
+      }
+    }
 
     it("should support xmpp (example1)") {
       val string = XmppExample1.string
@@ -272,8 +417,20 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
         feedChunker(chunker + h, t, fragmentSize)
       }
     }
+    def feedAndConsume(chunker: XmlChunker, rest: Iterable[Char], fragmentSize: Int, soFar: List[XmlChunk] = Nil): (XmlChunker, List[XmlChunk]) = {
+      if (rest.size <= fragmentSize) {
+        val nc = chunker + rest
+        (nc.consumeAll, soFar ::: nc.chunks)
+      }
+      else {
+        val (h,t) = rest.splitAt(fragmentSize)
+        val nc = chunker + h
+        val nsf = soFar ::: nc.chunks
+        feedAndConsume(nc.consumeAll, t, fragmentSize, nsf)
+      }
+    }
   }
-
+/*
   describe("XmlChunkSource") {
     describe("from chars") {
       it_("should parse the xmpp example1 successfully in two reads") {
@@ -348,7 +505,7 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
          </message></stream:stream>""")
       }
     }
-  }
+  }*/
 
   def collectAll[A](source: Source[A], soFar: List[Data[A]] = Nil): List[Data[A]] @processCps = {
     val read = source.read.receiveWithin(10 s)

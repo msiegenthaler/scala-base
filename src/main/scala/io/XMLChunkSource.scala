@@ -193,7 +193,6 @@ trait XmlChunk {
 object XmlChunker extends Log {
   def apply(depth: Int = 1) = new XmlChunkers(depth).init
 
-  //TODO cdata handling
   //TODO max size of parsed stuff (1Mb or so): mostly collected and elementData
 
   private class XmlChunkImpl(val chars: Iterable[Char], val context: Option[Elem]) extends XmlChunk
@@ -216,22 +215,29 @@ object XmlChunker extends Log {
     }
     private case class InElementTag(parents: List[Elem], chunks: List[XmlChunk], collected: Iterable[Char], depth: Int, elementData: Iterable[Char]) extends XmlChunker {
       override def push(data: Iterable[Char]) = {
-        val (h,t) = data.span(_ != '>')
-        if (t.nonEmpty) {
-          val tail = t.drop(1)
-          val tag = elementData ++ h ++ ">"
-          val chunk = collected ++ tag
-          if (tag.drop(1).head == '/') {
-            //Close of element
-            handleElementClose(tag, chunk).push(tail)
-          } else if (tag.takeRight(2).head == '/') {
-            //Inline close
-            handleElementOpenInlineClose(tag, chunk).push(tail)
-          } else {
-            //Opening tag
-            handleElementOpen(tag, chunk).push(tail)
-          }
-        } else copy(elementData = elementData ++ h)
+        val dso = elementData ++ data
+        if (dso.take(cdataStart.size).sameElements(cdataStart)) {
+          //CDATA start
+          val rest = dso.drop(cdataStart.size)
+          handleCData(collected).push(rest)
+        } else {
+          val (h,t) = data.span(_ != '>')
+          if (t.nonEmpty) {
+            val tail = t.drop(1)
+            val tag = elementData ++ h ++ ">"
+            val chunk = collected ++ tag
+            if (tag.drop(1).head == '/') {
+              //Close of element
+              handleElementClose(tag, chunk).push(tail)
+            } else if (tag.takeRight(2).head == '/') {
+              //Inline close
+              handleElementOpenInlineClose(tag, chunk).push(tail)
+            } else {
+              //Opening tag
+              handleElementOpen(tag, chunk).push(tail)
+            }
+          } else copy(elementData = elementData ++ h)
+        }
       }
       /** tag = <element> */
       protected def handleElementOpen(tag: Iterable[Char], chunk: Iterable[Char]): XmlChunker = {
@@ -242,6 +248,9 @@ object XmlChunker extends Log {
             case None =>
               LookingForElement(parents, chunks, Nil, depth)
           }
+        } else if (depth == rootDepth) {
+          //ignore text data inside chunk parent
+          LookingForElement(parents, chunks, tag, depth+1)
         } else LookingForElement(parents, chunks, chunk, depth+1)
       }
       /** tag = <element/> */
@@ -258,6 +267,13 @@ object XmlChunker extends Log {
           val newChunks = if (chunk.isEmpty) chunks else chunks ::: List(mkChunk(chunk))
           LookingForElement(parents, newChunks, Nil, depth-1)
         } else LookingForElement(parents, chunks, chunk, depth-1)
+      }
+      /** inside a cdata section */
+      protected def handleCData(chunk: Iterable[Char]): XmlChunker = {
+        CDataHandler(this, (chunker, data) => {
+          val d = chunk ++ data
+          LookingForElement(parents, chunker.chunks, d, depth)
+        }, cdataStart)
       }
 
       protected def parseXml(data: Iterable[Char]): Option[Elem] = {
@@ -283,6 +299,45 @@ object XmlChunker extends Log {
       override def consumeChunk = chunks match {
         case chunk :: rest => (Some(chunk), copy(chunks = rest))
         case Nil => (None, this)
+      }
+    }
+
+    private case class CDataHandler(context: XmlChunker, onDone: (XmlChunker,Iterable[Char]) => XmlChunker, soFar: Iterable[Char], kept: Iterable[Char] = Nil) extends XmlChunker {
+      override def push(data: Iterable[Char]) = {
+        matchToCDataEnd(kept ++ data) match {
+          case MatchResult(true, cdataAdd, rest) =>
+            val cdata = soFar ++ cdataAdd
+            onDone(context, cdata).push(rest)
+          case MatchResult(false, h, t) =>
+            copy(soFar=soFar ++ h, kept=t)
+        }
+      }
+      case class MatchResult(matched: Boolean, left: Iterable[Char], right: Iterable[Char])
+      def matchToCDataEnd(data: Iterable[Char], left: Iterable[Char]=Nil): MatchResult = {
+        val (h_,t) = data.span(_ != ']')
+        val h = left ++ h_
+        if (t.nonEmpty) {
+          //candidate, check if rest matches
+          if (t.size >= cdataEnd.size) {
+            val (candidate,r) = t.splitAt(cdataEnd.size)
+            if (candidate.sameElements(cdataEnd)) {
+              MatchResult(true, h ++ candidate, r)
+            } else {
+              val (h2,t2) = t.splitAt(1) //skip one char forward and try again
+              matchToCDataEnd(t2, h2)
+            }
+          } else MatchResult(false, h, t)
+        } else MatchResult(false, data, Nil)
+      }
+
+      override def chunks = context.chunks
+      override def consumeAll = {
+        val nc = context.consumeAll
+        copy(context=nc)
+      }
+      override def consumeChunk = {
+        val (chunk,nc) = context.consumeChunk
+        (chunk, copy(context=nc))
       }
     }
   }
