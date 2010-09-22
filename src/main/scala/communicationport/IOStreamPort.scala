@@ -12,7 +12,7 @@ import time._
 /**
  * Communication port based on an Input- and an OutputStream.
  */
-@deprecated
+@deprecated("Use the io package")
 trait IOStreamPort[Res] extends CommunicationPort with StateServer with Log {
   type State = IOStreamPortState[Res]
   

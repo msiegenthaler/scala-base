@@ -8,7 +8,7 @@ import Messages._
 /**
  * A port to communicate binary data over. For example a serial port.
  */
- @deprecated
+@deprecated("Use the io package")
 trait CommunicationPort {
   /**
    * Sends data to the port.
