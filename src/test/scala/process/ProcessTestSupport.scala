@@ -1,9 +1,10 @@
-package ch.inventsoft.scalabase.process
+package ch.inventsoft.scalabase
+package process
 
 import org.scalatest._
 import matchers._
-import ch.inventsoft.scalabase.process._
-import ch.inventsoft.scalabase.time._
+import time._
+
 
 object ProcessTestSupport {  
   def spawnedTest(body: => Unit @processCps) = {

@@ -1,9 +1,11 @@
-package ch.inventsoft.scalabase.process.performance
+package ch.inventsoft.scalabase
+package process
+package performance
 
 import scala.actors._
 import Actor._
-import ch.inventsoft.scalabase.time._
-import ch.inventsoft.scalabase.log._
+import time._
+import log._
 
 /**
  * Compare this implementation to other implementations (erlang, scala actors).

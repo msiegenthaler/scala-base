@@ -1,4 +1,5 @@
-package ch.inventsoft.scalabase.time
+package ch.inventsoft.scalabase
+package time
 
 /**
  * Duration in the temporal dimension (i.e. 24 seconds).

@@ -1,16 +1,18 @@
-package ch.inventsoft.scalabase.communicationport
+package ch.inventsoft.scalabase
+package communicationport
 
-import ch.inventsoft.scalabase.executionqueue.ExecutionQueues._
-import ch.inventsoft.scalabase.process._
-import ch.inventsoft.scalabase.process.cps.CpsUtils._
-import ch.inventsoft.scalabase.oip._
-import ch.inventsoft.scalabase.log._
 import java.io.{InputStream,OutputStream}
-import ch.inventsoft.scalabase.time._
+import executionqueue._
+import process._
+import oip._
+import log._
+import time._
+
 
 /**
  * Communication port based on an Input- and an OutputStream.
  */
+@deprecated
 trait IOStreamPort[Res] extends CommunicationPort with StateServer with Log {
   type State = IOStreamPortState[Res]
   

@@ -1,11 +1,11 @@
-package ch.inventsoft.scalabase.oip
+package ch.inventsoft.scalabase
+package oip
 
+import scala.concurrent.SyncVar
 import org.scalatest._
 import matchers._
-import ch.inventsoft.scalabase.process._
-import scala.concurrent.SyncVar
-import ch.inventsoft.scalabase.time._
-import cps.CpsUtils._
+import process._
+import time._
 
 
 class DependencySupervisorSpec extends ProcessSpec with ShouldMatchers {

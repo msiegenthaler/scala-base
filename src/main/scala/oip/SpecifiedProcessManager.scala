@@ -1,9 +1,11 @@
-package ch.inventsoft.scalabase.oip
+package ch.inventsoft.scalabase
+package oip
 
-import ch.inventsoft.scalabase.process._
+import process._
 import Messages._
-import ch.inventsoft.scalabase.time._
-import ch.inventsoft.scalabase.log.Log
+import time._
+import log.Log
+
 
 /**
  * Manages a single process according to a ProcessSpec.

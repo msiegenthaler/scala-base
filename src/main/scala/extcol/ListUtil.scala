@@ -1,4 +1,5 @@
-package ch.inventsoft.scalabase.extcol;
+package ch.inventsoft.scalabase
+package extcol
 
 
 object ListUtil {

@@ -1,11 +1,11 @@
-package ch.inventsoft.scalabase.process
+package ch.inventsoft.scalabase
+package process
 
+import scala.concurrent.SyncVar
 import org.scalatest._
 import matchers._
-import ch.inventsoft.scalabase.process._
-import ch.inventsoft.scalabase.process.cps.CpsUtils._
-import scala.concurrent.SyncVar
-import ch.inventsoft.scalabase.time._
+import time._
+
 
 class ProcessTest extends ProcessSpec with ShouldMatchers {
   

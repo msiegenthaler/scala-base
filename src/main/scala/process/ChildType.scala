@@ -1,4 +1,5 @@
-package ch.inventsoft.scalabase.process
+package ch.inventsoft.scalabase
+package process
 
 /**
  * Type of a child to spawn. 

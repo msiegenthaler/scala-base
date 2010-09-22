@@ -1,12 +1,13 @@
-package ch.inventsoft.scalabase.io
+package ch.inventsoft.scalabase
+package io
 
 import scala.collection.mutable.WrappedArray
-import ch.inventsoft.scalabase.process._
-import Messages._
-import ch.inventsoft.scalabase.oip._
-import ch.inventsoft.scalabase.executionqueue.ExecutionQueues._
-import ch.inventsoft.scalabase.time._
 import java.io.OutputStream
+import process._
+import Messages._
+import oip._
+import executionqueue._
+import time._
 
 
 object OutputStreamSink extends SpawnableCompanion[OutputStreamSink] {

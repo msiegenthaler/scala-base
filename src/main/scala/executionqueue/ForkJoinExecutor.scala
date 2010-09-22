@@ -1,4 +1,5 @@
-package ch.inventsoft.scalabase.executionqueue
+package ch.inventsoft.scalabase
+package executionqueue
 
 object ForkJoinExecutor extends ExecutorFactory {
   override def createExecutor(label: String, spec: ExecutorSpec): Executor = {

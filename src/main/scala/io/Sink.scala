@@ -1,6 +1,7 @@
-package ch.inventsoft.scalabase.io
+package ch.inventsoft.scalabase
+package io
 
-import ch.inventsoft.scalabase.process._
+import process._
 import Messages._
 
 

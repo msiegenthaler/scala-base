@@ -1,10 +1,9 @@
-package ch.inventsoft.scalabase.process
+package ch.inventsoft.scalabase
+package process
 
 import org.scalatest._
 import matchers._
-import ch.inventsoft.scalabase.time._
-import Process._
-import ProcessTestSupport._
+import time._
 import Messages._
 
 class MessagesSpec extends ProcessSpec with ShouldMatchers{

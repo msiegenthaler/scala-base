@@ -1,4 +1,5 @@
-package ch.inventsoft.scalabase.executionqueue
+package ch.inventsoft.scalabase
+package executionqueue
 
 import util._
 
@@ -11,8 +12,7 @@ trait ExecutionQueue {
 
 
 object ExecutionQueues {
-  //private val executorFactory = ThreadPoolExecutorFactory
-  private val executorFactory = ForkJoinExecutor
+  private val executorFactory = ForkJoinExecutor //alternative: ThreadPoolExecutor
   
   private val initialSpec = new ExecutionQueueSpec(Priority.Normal, QueueType.Concurrent, false)
   private val executors: Map[ExecutorSpec,Executor] = {
@@ -26,29 +26,8 @@ object ExecutionQueues {
     Map(es :_*)
   }
   
-  
-  /**
-   * Default execution queue (concurrent).
-   */
-  val execute: ExecutionQueue = queue()
-  /**
-   * Background priority execution queue (concurrent)
-   */
-  val executeInBackground: ExecutionQueue = queue background()
-  /**
-   * High priority execution queue (concurrent)
-   */
-  val executeHighPrio: ExecutionQueue = queue high()
-  /**
-   * Execute a task that spends a lot of time blocked. Beware, since this uses a thread per
-   * concurrent execution.
-   */
-  val executeForBlocking: ExecutionQueue = queue mightBlock()
-  
 
-  /**
-   * Define a special queue.
-   */
+  /** Define a specially defined queue. */
   def queue: ExecutionQueueGenerator =
     new ExecutionQueueGenerator(createQueue, initialSpec)
 
@@ -66,7 +45,6 @@ object ExecutionQueues {
     case other => None
   }
 
-  //TODO figure something out to allow "auto-termination"
   /**
    * Shutdown the execution queues. The object is not usable after this method has been called.
    */
@@ -79,6 +57,7 @@ object ExecutionQueues {
       }
     })
   }
+  //TODO figure something out to allow "auto-termination"
 
 
   private def createQueue(spec: ExecutionQueueSpec) = spec match {
@@ -88,7 +67,7 @@ object ExecutionQueues {
     case ExecutionQueueSpec(prio, QueueType.Serial, mb) =>
       val executor = executors(ExecutorSpec(prio, mb))
       new SerialQueue(executor)
-    case strange => throw new AssertionError("No matching queue type found... strange")
+    case strange => throw new AssertionError("No matching queue type found...")
   }
 
   private class ConcurrentQueue(executor: Executor) extends ExecutionQueue {
@@ -128,21 +107,18 @@ object ExecutionQueues {
       creator(spec)
     }
     
-    def withPriority(priority: Priority) = 
-      respec(ExecutionQueueSpec(priority, spec.queueType, spec.mightBlock))
+    def withPriority(priority: Priority) = respec(spec.copy(priority=priority))
     def realtime = withPriority(Realtime)
     def high = withPriority(High)
     def low = withPriority(Low)
     def normal = withPriority(Normal)
     def background = withPriority(Background)
     
-    def ofType(queueType: QueueType) = 
-      respec(ExecutionQueueSpec(spec.priority, queueType, spec.mightBlock))
+    def ofType(queueType: QueueType) = respec(spec.copy(queueType=queueType))
     def serial = ofType(QueueType.Serial)
     def concurrent = ofType(QueueType.Concurrent)
     
-    def mightBlock(might: Boolean) = 
-      respec(ExecutionQueueSpec(spec.priority, spec.queueType, might))
+    def mightBlock(might: Boolean): ExecutionQueueGenerator = respec(spec.copy(mightBlock=might))
     def mightBlock: ExecutionQueueGenerator = mightBlock(true)
     def nonblocking = mightBlock(false)
     

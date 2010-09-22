@@ -1,4 +1,5 @@
-package ch.inventsoft.scalabase.log
+package ch.inventsoft.scalabase
+package log
 
 
 /**

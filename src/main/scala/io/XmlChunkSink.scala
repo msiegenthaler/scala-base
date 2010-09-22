@@ -1,13 +1,13 @@
-package ch.inventsoft.scalabase.io
+package ch.inventsoft.scalabase
+package io
 
-import ch.inventsoft.scalabase.process._
-import Messages._
-import ch.inventsoft.scalabase.process.cps.CpsUtils._
-import ch.inventsoft.scalabase.oip._
-import ch.inventsoft.scalabase.executionqueue.ExecutionQueues._
-import ch.inventsoft.scalabase.time._
 import scala.xml._
 import java.nio.charset.Charset
+import process._
+import Messages._
+import oip._
+import executionqueue._
+import time._
 
 
 /**

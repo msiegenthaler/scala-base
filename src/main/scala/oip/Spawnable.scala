@@ -1,8 +1,8 @@
-package ch.inventsoft.scalabase.oip
+package ch.inventsoft.scalabase
+package oip
 
-import ch.inventsoft.scalabase.executionqueue._
-import ExecutionQueues._
-import ch.inventsoft.scalabase.process._
+import executionqueue._
+import process._
 
 
 /**

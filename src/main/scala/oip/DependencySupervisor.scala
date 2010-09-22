@@ -1,10 +1,12 @@
-package ch.inventsoft.scalabase.oip
+package ch.inventsoft.scalabase
+package oip
 
-import ch.inventsoft.scalabase.time._
-import ch.inventsoft.scalabase.process._
+import time._
+import process._
 import Messages._
-import ch.inventsoft.scalabase.log._
+import log._
 import ProcessSpecification._ 
+
 
 /**
  * Supervisor, that allows for easy creation of processes that depend upon each other.

@@ -1,13 +1,15 @@
-package ch.inventsoft.scalabase.process.cps
+package ch.inventsoft.scalabase
+package process
+package cps
 
 import scala.util.continuations._
-import ch.inventsoft.scalabase.log._
-import ch.inventsoft.scalabase.time._
-import ch.inventsoft.scalabase.executionqueue._
-import ch.inventsoft.scalabase.process._
-import ExecutionQueues._
+import log._
+import time._
+import executionqueue._
+import process._
 
 
+/** Process implementation based on delimited continuations */
 object ProcessCps extends Log with MessageBoxContainer[Any] {
 
   def spawnProcess(executionQueue: ExecutionQueue)(body: => Any @processCps): Process = {

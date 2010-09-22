@@ -1,8 +1,9 @@
-package ch.inventsoft.scalabase.extcol
+package ch.inventsoft.scalabase
+package extcol
 
 import org.scalatest._
 import matchers._
-import ch.inventsoft.scalabase.time._
+import time._
 import ListUtil._
 
 

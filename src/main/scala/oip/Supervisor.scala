@@ -1,4 +1,5 @@
-package ch.inventsoft.scalabase.oip
+package ch.inventsoft.scalabase
+package oip
 
 /**
  * Process that supervises other processes (called child processes).

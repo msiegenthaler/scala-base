@@ -1,8 +1,10 @@
-package ch.inventsoft.scalabase.binary
+package ch.inventsoft.scalabase
+package binary
 
 import org.scalatest._
 import matchers._
 import BytesParsing._
+
 
 class BytesParsingSpec  extends Spec with ShouldMatchers {
   describe("Bytes Parsing") {

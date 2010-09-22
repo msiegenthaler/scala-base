@@ -1,12 +1,12 @@
-package ch.inventsoft.scalabase.io
+package ch.inventsoft.scalabase
+package io
 
 import org.scalatest._
 import matchers._
 import java.io._
-import ch.inventsoft.scalabase.oip._
-import ch.inventsoft.scalabase.process._
-import ch.inventsoft.scalabase.process.cps.CpsUtils._
-import ch.inventsoft.scalabase.time._
+import oip._
+import process._
+import time._
 
 
 class OutputStreamSinkSpec extends ProcessSpec with ShouldMatchers {

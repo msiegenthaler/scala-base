@@ -1,12 +1,13 @@
-package ch.inventsoft.scalabase.io
+package ch.inventsoft.scalabase
+package io
 
+import scala.xml._
 import java.nio.{ByteBuffer,CharBuffer}
 import java.nio.charset._
-import ch.inventsoft.scalabase.log._
-import scala.xml._
-import ch.inventsoft.scalabase.process._
-import ch.inventsoft.scalabase.oip._
-import ch.inventsoft.scalabase.time._
+import log._
+import process._
+import oip._
+import time._
 
 
 /**

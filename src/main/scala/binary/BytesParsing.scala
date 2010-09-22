@@ -1,4 +1,5 @@
-package ch.inventsoft.scalabase.binary
+package ch.inventsoft.scalabase
+package binary
 
 /**
  * Infrastructure to parse byte streams into objects. Use with binary protocols.

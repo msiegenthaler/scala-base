@@ -1,12 +1,11 @@
-package ch.inventsoft.scalabase.oip
+package ch.inventsoft.scalabase
+package oip
 
-import ch.inventsoft.scalabase.executionqueue._
-import ch.inventsoft.scalabase.time._
-import ch.inventsoft.scalabase.process._
-import ch.inventsoft.scalabase.process.cps.CpsUtils._
-import Process._
+import executionqueue._
+import time._
+import process._
 import Messages._
-import ch.inventsoft.scalabase.log.Log
+import log.Log
 
 
 /**

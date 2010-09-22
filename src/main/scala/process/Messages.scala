@@ -1,8 +1,7 @@
-package ch.inventsoft.scalabase.process
+package ch.inventsoft.scalabase
+package process
 
-import Process._
-import cps.CpsUtils._
-import ch.inventsoft.scalabase.time._
+import time._
 
 
 /**

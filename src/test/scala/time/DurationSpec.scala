@@ -1,8 +1,9 @@
-package ch.inventsoft.scalabase.time
+package ch.inventsoft.scalabase
+package time
 
 import org.scalatest._
 import matchers._
-import ch.inventsoft.scalabase.time._
+
 
 class DurationSpec extends Spec with ShouldMatchers {
   describe("Duration") {

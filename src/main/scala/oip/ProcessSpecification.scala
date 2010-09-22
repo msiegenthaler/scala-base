@@ -1,13 +1,13 @@
-package ch.inventsoft.scalabase.oip
+package ch.inventsoft.scalabase
+package oip
 
-import ch.inventsoft.scalabase.process._
+import process._
 import Messages._
-import ch.inventsoft.scalabase.time._
+import time._
 
 
 /**
  * Specification of a process. Applying executes the process's body.
- * @author ms
  */
 trait ProcessSpecification extends Function0[Unit @processCps] {
   val id: Option[Symbol]

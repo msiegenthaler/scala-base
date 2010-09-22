@@ -1,4 +1,5 @@
-package ch.inventsoft.scalabase.process
+package ch.inventsoft.scalabase
+package process
 
 /**
  * An lightweight execution thread that may have side-effects (i.e. send, receive messages). Also

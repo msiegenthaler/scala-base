@@ -1,11 +1,12 @@
-package ch.inventsoft.scalabase.communicationport
+package ch.inventsoft.scalabase
+package communicationport
 
 import org.scalatest._
 import matchers._
 import java.io._
-import ch.inventsoft.scalabase.oip._
-import ch.inventsoft.scalabase.process._
-import ch.inventsoft.scalabase.time._
+import oip._
+import process._
+import time._
 
 
 class IOStreamPortSpec extends ProcessSpec with ShouldMatchers {

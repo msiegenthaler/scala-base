@@ -1,16 +1,15 @@
 package ch.inventsoft.scalabase
 
-import ch.inventsoft.scalabase.time._
-import ch.inventsoft.scalabase.executionqueue._
-import ExecutionQueues._
+import scala.util.continuations._
+import time._
+import executionqueue._
+import process.cps._
 
 
 /**
  * Lightweight processes (aka actors). See Process for detailed documentation.
  */
 package object process {
-  import ch.inventsoft.scalabase.process._
-  import ch.inventsoft.scalabase.process.cps._
   
   type processCps = ProcessCps.processCps
 
@@ -132,6 +131,14 @@ package object process {
   object Timeout {
     override def toString = "Timeout"
   }
+  
+  
+  
+  //CPS Util functions
+  
+  implicit def cpsIterable[A](ita: Iterable[A]) = CpsUtils.cpsIterable(ita)
+  implicit def cpsOption[A](option: Option[A]) = CpsUtils.cpsOption(option)
+  implicit def cpsPartialFunction[A,B,X](fun: PartialFunction[A,B @cps[X]]) = CpsUtils.cpsPartialFunction(fun)
 }
 
 

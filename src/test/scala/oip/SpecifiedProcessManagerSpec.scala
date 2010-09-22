@@ -1,12 +1,13 @@
-package ch.inventsoft.scalabase.oip
+package ch.inventsoft.scalabase
+package oip
 
+import scala.concurrent._
 import org.scalatest._
 import matchers._
-import ch.inventsoft.scalabase.process._
-import ch.inventsoft.scalabase.oip._
-import ch.inventsoft.scalabase.time._
+import process._
+import oip._
+import time._
 import Messages._
-import scala.concurrent._
 
 
 class SpecifiedProcessManagerSpec extends ProcessSpec with ShouldMatchers {

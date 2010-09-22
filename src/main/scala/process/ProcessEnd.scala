@@ -1,4 +1,5 @@
-package ch.inventsoft.scalabase.process
+package ch.inventsoft.scalabase
+package process
 
 /**
  * Message that signals the termination of the process (normal or abnormal).

@@ -1,9 +1,10 @@
-package ch.inventsoft.scalabase.process.cps
+package ch.inventsoft.scalabase
+package process
+package cps
 
 import org.scalatest._
 import matchers._
-import ch.inventsoft.scalabase.process._
-import ch.inventsoft.scalabase.time._
+import time._
 import CpsUtils._
 
 class CpsUtilsSpec extends ProcessSpec with ShouldMatchers {

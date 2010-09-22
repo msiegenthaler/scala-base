@@ -1,4 +1,5 @@
-package ch.inventsoft.scalabase.process.cps
+package ch.inventsoft.scalabase.process
+package cps
 
 import scala.collection.generic.CanBuildFrom
 import scala.collection.mutable.Builder
@@ -9,8 +10,7 @@ import scala.util.continuations._
  * Utilities for cps code.
  */
 object CpsUtils {
-  
-  implicit def cpsIterable[A](ita: Iterable[A]): CpsIterable[A] = {
+  def cpsIterable[A](ita: Iterable[A]): CpsIterable[A] = {
     new CpsIterable(ita)
   }
   
@@ -60,12 +60,12 @@ object CpsUtils {
       exec(z)
     }
     def foldRight_cps[B,X](z: B)(op: (A,B) => B @cps[X]): B @cps[X] = {
-      reversed.foldLeft_cps(z)((x,y) => op(y,x))
+      new CpsIterable(reversed).foldLeft_cps(z)((x,y) => op(y,x))
     }
   }
 
   
-  implicit def cpsOption[A](option: Option[A]): CpsOption[A] = option match {
+  def cpsOption[A](option: Option[A]): CpsOption[A] = option match {
     case Some(value) => new CpsSome(value)
     case None => CpsNone
   }
@@ -89,7 +89,7 @@ object CpsUtils {
   }
 
   
-  implicit def cpsPartialFunction[A,B,X](fun: PartialFunction[A,B @cps[X]]) = {
+  def cpsPartialFunction[A,B,X](fun: PartialFunction[A,B @cps[X]]) = {
     new CpsPartialFunction(fun)
   }
   

@@ -1,12 +1,14 @@
-package ch.inventsoft.scalabase.communicationport
+package ch.inventsoft.scalabase
+package communicationport
 
-import ch.inventsoft.scalabase.process._
+import process._
 import Messages._
 
 
 /**
  * A port to communicate binary data over. For example a serial port.
  */
+ @deprecated
 trait CommunicationPort {
   /**
    * Sends data to the port.

@@ -1,17 +1,16 @@
-package ch.inventsoft.scalabase.io
+package ch.inventsoft.scalabase
+package io
 
 import org.scalatest._
 import matchers._
 import java.io._
 import java.nio.charset.Charset
-import ch.inventsoft.scalabase.oip._
-import ch.inventsoft.scalabase.process._
-import ch.inventsoft.scalabase.process.cps.CpsUtils._
-import ch.inventsoft.scalabase.time._
+import oip._
+import process._
+import time._
 
 
 class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
-
   describe("XmlChunker") {
     it("should not return any chunks in initial state") {
       val c = XmlChunker()

@@ -1,4 +1,5 @@
-package ch.inventsoft.scalabase.executionqueue
+package ch.inventsoft.scalabase
+package executionqueue
 
 /**
  * Counts the nesting depth of an execution.

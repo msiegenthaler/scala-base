@@ -1,6 +1,8 @@
-package ch.inventsoft.scalabase.time
+package ch.inventsoft.scalabase
+package time
 
 
+/** Unit of time (i.e. second, millisecond) */
 trait TimeUnit {
   protected[time] def oneInNanos: Long
   protected[time] def inNanos(amount: Long) = amount * oneInNanos
