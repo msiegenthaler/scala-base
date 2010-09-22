@@ -296,74 +296,6 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
   private trait CaptureRegistrantCreated {
     val registrant: CaptureRegistrant
   }
-
-/*
-  private class CaptureFun(matcher: Any => Boolean, fun: (ProcessState,Any) => Unit, state: ProcessState, flow: ProcessFlowHandler) extends PartialFunction[Any,Unit] {
-    override def isDefinedAt(msg: Any) = {
-      matcher(msg) || msg == ManagementMessage
-    }
-    override def apply(msg: Any) = {
-      if (msg == ManagementMessage) processManagementMessage
-      else fun(state, msg)
-    }
-    protected[this] def processManagementMessage = {
-      try {
-        val state2 = flow.step(state)
-        try {
-          rescheduleCapture(state2)
-        } catch {
-          case t => flow.exception(state2, t)
-        }
-      } catch {
-        case t => flow.exception(state, t)
-      }
-    }
-    protected[this] def rescheduleCapture(withState: ProcessState): Unit
-  }
-*/
-/*
-  private class CaptureFun(state: ProcessState, flow: ProcessFlowHandler, matcher: Any => Boolean, fun: (ProcessState, Any) => Unit) extends PartialFunction[Any,Unit] {
-    override def isDefinedAt(msg: Any) = {
-      matcher(msg) || msg == ManagementMessage
-    }
-    override def apply(msg: Any) = {
-      if (msg == ManagementMessage) processManagementMessage
-      else fun(state, msg)
-    }
-    protected[this] def processManagementMessage = {
-      try {
-        val state2 = flow.step(state)
-        try {
-          val capture = {
-            if (state2 == state) this
-            else {
-              val me = this
-              new CaptureFun(state2, flow, matcher, fun)
-              new CaptureFun(state2, flow, matcher, fun) with Proxy {
-                override val self = me
-                override def equals(other: Any) = self.equals(other) || eq(other.asInstanceOf[AnyRef])
-                override def toString = self.toString+"'"
-              }
-            }
-          }
-          state2.messageBox.setCapture(capture)
-        } catch {
-          case t => flow.exception(state2, t)
-        }
-      } catch {
-        case t => flow.exception(state, t)
-      }
-    }
-    def andBefore(exec: Any => Any) = {
-      val me = this
-      new CaptureFun(state, flow, matcher, (state, msg) => fun(state, exec(msg))) with Proxy {
-        override val self = me
-      }
-    }
-    override def toString = "CaptureFun"
-  }
-  */
-
   private val timer = new java.util.Timer(true)
 
   /**
@@ -932,6 +864,3 @@ trait MessageBoxContainer[T] extends Log {
     }
   }
 }
-
-//TODO there is a problem with deferred cancel, if the captures in a receiveWithin/receiveNoWait
-// matches a ManagementMsg and the cancel is received before the capture is readded
