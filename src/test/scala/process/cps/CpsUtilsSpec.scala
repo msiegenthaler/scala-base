@@ -94,12 +94,12 @@ class CpsUtilsSpec extends ProcessSpec with ShouldMatchers {
             }
           }
           ps.size should be(3)
-          ps.foreach(_ ! Terminate)
+          ps.foreach_cps(_ ! Terminate)
         }
         it_("should allow receives in map") {
           val p = self
           spawnChild(Required) {
-            (1 to 100).foreach(i => p ! i)
+            (1 to 100).foreach_cps(i => p ! i)
           }
           val r = (1 to 100).map_cps { _ =>
             receive { case a: Int => a }
@@ -117,14 +117,14 @@ class CpsUtilsSpec extends ProcessSpec with ShouldMatchers {
             } :: Nil 
           }
           ps.size should be(6)
-          ps.foreach(_ ! Terminate)
+          ps.foreach_cps(_ ! Terminate)
         }
       }
       describe("foldLeft") {
         it_("should be able to receive in foldLeft") {
           val p = self
           spawnChild(Required) {
-            (1 to 100).foreach(i => p ! i)
+            (1 to 100).foreach_cps(i => p ! i)
           }
           val r = (1 to 100).foldLeft_cps(0) { (s,e) =>
             receive { case a: Int => s+a } 
@@ -134,7 +134,7 @@ class CpsUtilsSpec extends ProcessSpec with ShouldMatchers {
         it_("should have the correct order (first is first)") {
           val p = self
           spawnChild(Required) {
-            (1 to 100).foreach(i => p ! i)
+            (1 to 100).foreach_cps(i => p ! i)
           }
           val r = (1 to 100).foldLeft_cps(0) { (s,e) =>
             receive { case a: Int => a } 
@@ -146,7 +146,7 @@ class CpsUtilsSpec extends ProcessSpec with ShouldMatchers {
         it_("should be able to receive in foldRight") {
           val p = self
           spawnChild(Required) {
-            (1 to 100).foreach(i => p ! i)
+            (1 to 100).foreach_cps(i => p ! i)
           }
           val r = (1 to 100).foldRight_cps(0) { (e,s) =>
             receive { case a: Int => s+a } 
@@ -156,7 +156,7 @@ class CpsUtilsSpec extends ProcessSpec with ShouldMatchers {
         it_("should have the correct order (first is last)") {
           val p = self
           spawnChild(Required) {
-            (1 to 100).foreach(i => p ! i)
+            (1 to 100).foreach_cps(i => p ! i)
           }
           val r = (1 to 100).foldRight_cps(0) { (e,s) =>
             receive { case `e` => e } 

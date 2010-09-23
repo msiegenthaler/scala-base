@@ -319,10 +319,11 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
   /** "Management" view onto a process. All declared methods behave like .!() (async, no exeception) */
   private trait ProcessInternal extends Process {
     /** Forcefully stop the process on the next possible location */
-    def kill(killer: ProcessInternal, originalKiller: Process, reason: Throwable): Unit
-    def removeChild(child: ProcessInternal): Unit
-    def addWatcher(watcher: Process): Unit
-    def removeWatcher(watcher: Process): Unit
+    def kill(killer: ProcessInternal, originalKiller: Process, reason: Throwable)
+    def removeChild(child: ProcessInternal)
+    def addWatcher(watcher: ProcessInternal)
+    def removeWatcher(watcher: ProcessInternal)
+    def send(msg: Any)
   }
   
   /**
@@ -372,17 +373,17 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
     override def onNormalTermination(of: ProcessInternal, finalState: ProcessState) = {
       super.onNormalTermination(of, finalState)
       finalState.watched.foreach(_.removeWatcher(of))
-      finalState.watchers.foreach(_ ! ProcessExit(of))
+      finalState.watchers.foreach(_ send ProcessExit(of))
     }
     override def onException(in: ProcessInternal, finalState: ProcessState, cause: Throwable) = {
       super.onException(in, finalState, cause)
       finalState.watched.foreach(_.removeWatcher(in))
-      finalState.watchers.foreach(_ ! ProcessCrash(in, cause))
+      finalState.watchers.foreach(_ send ProcessCrash(in, cause))
     }
     override def onKill(of: ProcessInternal, finalState: ProcessState, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
       super.onKill(of, finalState, by, originalBy, reason)
       finalState.watched.foreach(_.removeWatcher(of))
-      finalState.watchers.foreach(_ ! ProcessKill(of, by, reason))
+      finalState.watchers.foreach(_ send ProcessKill(of, by, reason))
     }
   }
   /** Kills the children if the process crashes */
@@ -418,18 +419,18 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
   }
   /** Sends ProcessEnd messages to the parent */
   private trait ParentAsWatcherPL extends ProcessListener {
-    val parent: Process
+    val parent: ProcessInternal
     override def onNormalTermination(of: ProcessInternal, finalState: ProcessState) = {
       super.onNormalTermination(of, finalState)
-      parent ! ProcessExit(of)
+      parent send ProcessExit(of)
     }
     override def onException(in: ProcessInternal, finalState: ProcessState, cause: Throwable) = {
       super.onException(in, finalState, cause)
-      parent ! ProcessCrash(in, cause)
+      parent send ProcessCrash(in, cause)
     }
     override def onKill(of: ProcessInternal, finalState: ProcessState, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
       super.onKill(of, finalState, by, originalBy, reason)
-      parent ! ProcessKill(of, by, reason)
+      parent send ProcessKill(of, by, reason)
     }
   }
   /** Removes the child from the parent on process ends (all) */
@@ -481,7 +482,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
   /**
    * State of a process
    */
-  private case class ProcessState(process: ProcessImpl, children: List[ProcessInternal], watchers: List[Process], watched: List[ProcessInternal]) {
+  private case class ProcessState(process: ProcessImpl, children: List[ProcessInternal], watchers: List[ProcessInternal], watched: List[ProcessInternal]) {
     def messageBox = process.messageBox
   }
 
@@ -586,11 +587,11 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
       val nc = state.children.filterNot(_ == child)
       state.copy(children = nc)
     }
-    override def addWatcher(watcher: Process) = mgmtStep { state =>
+    override def addWatcher(watcher: ProcessInternal) = mgmtStep { state =>
       log.trace("{} add watcher {}", external, watcher)
       state.copy(watchers = watcher :: state.watchers)
     }
-    override def removeWatcher(watcher: Process) = mgmtStep { state =>
+    override def removeWatcher(watcher: ProcessInternal) = mgmtStep { state =>
       log.trace("{} remove watcher {}", external, watcher)
       val nw = state.watchers.filterNot(_ == watcher)
       state.copy(watchers = nw)
@@ -601,10 +602,11 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
       if (!mgmtSteps.compareAndSet(steps, action :: steps))
         mgmtStep(action)  //try again
       else 
-        this ! ManagementMessage //trigger a step if within a receive
+        this send ManagementMessage //trigger a step if within a receive
     }
 
     override def !(msg: Any) = messageBox.enqueue(msg)
+    def send(msg: Any) = messageBox.enqueue(msg)
 
     override def toString = "<Process-"+pid+">"
 

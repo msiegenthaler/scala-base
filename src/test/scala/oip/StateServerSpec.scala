@@ -192,12 +192,12 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
     
     it_("should support multiple calls") {
       val server = PeopleStateServer()
-      (1 to 10).foreach(i => server.addPersonFast("Person "+i))
+      (1 to 10).foreach_cps(i => server.addPersonFast("Person "+i))
       assertEquals(receiveWithin(1 s)(server.count), 10)
     }
     it_("should support many calls") {
       val server = PeopleStateServer()
-      (1 to 10000).foreach(i => server.addPersonFast("Person "+i))
+      (1 to 10000).foreach_cps(i => server.addPersonFast("Person "+i))
       assertEquals(receiveWithin(10 s)(server.count), 10000)
     }
     
@@ -297,3 +297,4 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
     }
   }
 }
+

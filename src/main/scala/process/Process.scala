@@ -25,5 +25,5 @@ trait Process {
    * Send an asynchronous message to the process.
    * @param msg the message
    */
-  def !(msg: Any): Unit
+  def !(msg: Any): Unit @processCps
 }

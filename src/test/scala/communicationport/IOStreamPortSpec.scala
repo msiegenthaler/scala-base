@@ -1,6 +1,7 @@
 package ch.inventsoft.scalabase
 package communicationport
 
+/*
 import org.scalatest._
 import matchers._
 import java.io._
@@ -164,3 +165,4 @@ class IOStreamPortSpec extends ProcessSpec with ShouldMatchers {
     }
   }
 }
+*/

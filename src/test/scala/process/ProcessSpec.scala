@@ -767,7 +767,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
           }
           doit(0)
         }
-        def exec(left: Long): Unit = left match {
+        def exec(left: Long): Unit @processCps = left match {
           case 0 => ()
           case left =>
             p ! left
@@ -889,7 +889,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         val mem0 = Runtime.getRuntime.totalMemory - Runtime.getRuntime.freeMemory
         val ps = (1 to count).map { _ => 
           spawn { receive { case Exit => () } }
-        }
+        }.toList
         //now we have 'count' processes running
         Runtime.getRuntime.gc()
         sleep(200 ms)
@@ -898,7 +898,13 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         println("Running "+count+" processes with <"+(mem/1048576)+"Mb used (<"+bytesPerProcess+" bytes per process)")
         if (bytesPerProcess > 3000) fail("Too much memory used per process: "+bytesPerProcess+" bytes")
         //Stopping
-        ps.foreach(p => p ! Exit)
+        def stop(toStop: List[Process]): Unit @processCps = {
+          if (toStop.nonEmpty) {
+            toStop.head ! Exit
+            stop(toStop.tail)
+          } else noop
+        }
+        stop(ps)
       }
     }
   }

@@ -65,22 +65,13 @@ object RingPerformance extends Log {
   }
   
   def connectNodes(nodes: List[Process]) = {
-    def connect(firstNode: Process, remaining: List[Process]): Unit = remaining match {
-      case a :: b :: tail =>
-        a ! SetNextNode(b)
-        connect(firstNode, b :: tail)
-      case last :: Nil =>
-        last ! SetNextNode(firstNode)
-      case Nil => ()
-    }
-    nodes match {
-      case onlyOne :: Nil =>
-        onlyOne ! SetNextNode(onlyOne)
-      case first :: tail =>
-        first ! SetNextNode(tail.head)
-        connect(nodes.head, nodes.tail)
-      case Nil => ()
-    }
+    if (nodes.nonEmpty) {
+      val n2 = nodes.tail ::: nodes.head :: Nil
+      nodes.zip(n2).foreach_cps { (pair) =>
+        val (from,to) = pair
+        from ! SetNextNode(to)
+      }
+    } else noop
   }
   
   
@@ -140,6 +131,4 @@ object RingPerformance extends Log {
   case object StartMessage
   case object StopMessage
   case class TokenMessage(id: Int, value: Int)
-
-  
 }

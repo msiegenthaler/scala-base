@@ -16,17 +16,17 @@ import log.Log
 trait StateServer extends Spawnable with Log with Process {
   protected type State
 
-  override def !(msg: Any): Unit = process ! msg
-  def ![R](msg: MessageWithSelectableReply[R]): MessageSelector[R] = {
+  override def !(msg: Any) = process ! msg
+  def ![R](msg: MessageWithSelectableReply[R]) = {
     msg.sendAndSelect(this)
   }
 
-  protected[this] def cast(modificator: State => State @processCps): Unit = {
+  protected[this] def cast(modificator: State => State @processCps) = {
     this ! new ModifyStateMessage {
       override def execute(state: State) = modificator(state)
     }
   }
-  protected[this] def call[R](fun: State => (R,State) @processCps): MessageSelector[R] = {
+  protected[this] def call[R](fun: State => (R,State) @processCps): Selector[R] @processCps = {
     this ! new ModifyStateMessage with MessageWithSimpleReply[R] {
       override def execute(state: State) = {
         val (v, s) = fun(state)
@@ -35,7 +35,7 @@ trait StateServer extends Spawnable with Log with Process {
       }
     }
   }
-  protected[this] def get[R](getter: State => R @processCps): MessageSelector[R] = {
+  protected[this] def get[R](getter: State => R @processCps): Selector[R] @processCps = {
     this ! new ModifyStateMessage with MessageWithSimpleReply[R] {
       override def execute(state: State) = {
         val v = getter(state)
@@ -44,7 +44,7 @@ trait StateServer extends Spawnable with Log with Process {
       }
     }
   }
-  protected[this] def async[R](fun: State => R @processCps) = {
+  protected[this] def async[R](fun: State => R @processCps): Selector[R] @processCps = {
     this ! new ModifyStateMessage with MessageWithSimpleReply[R] {
       override def execute(state: State) = {
         spawnChild(Required) {
@@ -56,7 +56,7 @@ trait StateServer extends Spawnable with Log with Process {
     }
   }
   protected def stop = this ! Terminate
-  protected def stopAndWait: MessageSelector[Unit] = {
+  protected def stopAndWait: Completion @processCps = {
     async { state =>
       watch(process)
       stop

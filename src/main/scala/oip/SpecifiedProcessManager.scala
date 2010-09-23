@@ -27,7 +27,7 @@ trait SpecifiedProcessManager {
    * @param nice
    * @return nothing as soon as the process is fully stopped
    */
-  def stop(nice: Boolean): MessageSelector[Unit]
+  def stop(nice: Boolean): Completion @processCps
   
   override def toString = "Manager for ["+specification+"]["+managedProcess+"]" 
 }
@@ -43,7 +43,7 @@ case class ForceTermination() extends Exception("Forces termination")
 case class CouldNotSpawnChild(reason: Throwable) extends Exception("Could not spawn child", reason)
 
 trait SpecifiedProcessManagerParent {
-  def processStopped(manager: SpecifiedProcessManager, requestsRestart: Boolean): Unit
+  def processStopped(manager: SpecifiedProcessManager, requestsRestart: Boolean): Unit @processCps
 }
 
 object SpecifiedProcessManager {
@@ -90,7 +90,7 @@ object SpecifiedProcessManager {
 
     override def stop(nice: Boolean) = StopManager(nice) sendAndSelect process
     
-    protected[this] def doStop(nice: Boolean)(whenDone: => Unit) = {
+    protected[this] def doStop(nice: Boolean)(whenDone: => Unit @processCps) = {
       val niceTimeout = if (nice) specification.shutdownTimeout else None 
       niceTimeout match {
         case Some(timeout) =>

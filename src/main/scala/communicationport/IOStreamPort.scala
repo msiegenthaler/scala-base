@@ -1,6 +1,7 @@
 package ch.inventsoft.scalabase
 package communicationport
 
+/*
 import java.io.{InputStream,OutputStream}
 import executionqueue._
 import process._
@@ -164,3 +165,4 @@ object IOStreamPortWriter extends SpawnableCompanion[IOStreamPortWriter] {
     new IOStreamPortWriter(output)
   }
 }
+*/

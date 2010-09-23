@@ -66,7 +66,7 @@ object ProcessLargeBufferPerformance extends Log {
 
     log.trace("Sending {} messages", msgCount)
     val sender = spawn {
-      (1 to msgCount).foreach(i => receiver ! i)
+      (1 to msgCount).foreach_cps(i => receiver ! i)
       receiver ! Go
     }
 

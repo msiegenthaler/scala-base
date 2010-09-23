@@ -10,7 +10,6 @@ import process.cps._
  * Lightweight processes (aka actors). See Process for detailed documentation.
  */
 package object process {
-  
   type processCps = ProcessCps.processCps
 
   /**
@@ -122,8 +121,7 @@ package object process {
      */
     def currentProcess: Option[Process] = ProcessCps.useWithCare.currentProcess
   }  
-    
-    
+
   /**
    * Message signaling an expired timeout.
    * @see process.receiveWithin and process.receiveNoWait

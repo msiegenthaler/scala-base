@@ -26,12 +26,12 @@ class MessagesSpec extends ProcessSpec with ShouldMatchers{
         step(log)
     }
     
-    def log(text: String): Unit = process ! Log(text)
-    def logged: MessageSelector[String] = GetLogged().sendAndSelect(process)
+    def log(text: String) = process ! Log(text)
+    def logged = GetLogged().sendAndSelect(process)
     def loggedSlow(delay: Duration) = GetLoggedDelay(delay).sendAndSelect(process)
   }
   case class TestMessage() extends SenderAwareMessage {
-    val senderProcess = sender
+    def senderProcess = sender
     def reply(msg: Any) = sender ! msg
   }
   

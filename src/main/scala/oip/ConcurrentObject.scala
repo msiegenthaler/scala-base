@@ -22,7 +22,7 @@ trait ConcurrentObject {
   protected[this] def concurrentQueue: ExecutionQueue = execute
   
   /** Doesn't do much except returning a MessageSelector instead of a "simple" value */
-  protected[this] def replyInCallerProcess[A](fun: => A @processCps): MessageSelector[A] @processCps = {
+  protected[this] def replyInCallerProcess[A](fun: => A @processCps): Selector[A] @processCps = {
     val token = RequestToken.create[A]
     token.reply(fun)
     token.select
@@ -36,8 +36,9 @@ trait ConcurrentObject {
   }
 
   /** Executes fun in a new process (spawnChild(Required)) and returns a selector for the result */
-  protected[this] def concurrentWithReply[A](fun: => A @processCps): MessageSelector[A] @processCps = concurrentWithReply(concurrentQueue)(fun)
-  protected[this] def concurrentWithReply[A](queue: ExecutionQueue)(fun: => A @processCps): MessageSelector[A] @processCps = {
+  protected[this] def concurrentWithReply[A](fun: => A @processCps): Selector[A] @processCps =
+    concurrentWithReply(concurrentQueue)(fun)
+  protected[this] def concurrentWithReply[A](queue: ExecutionQueue)(fun: => A @processCps) = {
     val token = RequestToken.create[A]
     spawnChildProcess(queue)(Required) {
       val result = fun
@@ -54,8 +55,9 @@ trait ConcurrentObject {
    *   reply(r)
    * }
    */
-  protected[this] def concurrentWithReplyFun[A](fun: (A => Unit) => Unit @processCps): MessageSelector[A] @processCps = concurrentWithReplyFun(concurrentQueue)(fun)
-  protected[this] def concurrentWithReplyFun[A](queue: ExecutionQueue)(fun: (A => Unit) => Unit @processCps): MessageSelector[A] @processCps = {
+  protected[this] def concurrentWithReplyFun[A](fun: (A => Unit @processCps) => Unit @processCps): Selector[A] @processCps =
+    concurrentWithReplyFun(concurrentQueue)(fun)
+  protected[this] def concurrentWithReplyFun[A](queue: ExecutionQueue)(fun: (A => Unit @processCps) => Unit @processCps) = {
     val token = RequestToken.create[A]
     spawnChildProcess(queue)(Required) {
       val result = fun(token.reply _)

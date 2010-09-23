@@ -8,6 +8,7 @@ import Messages._
 /**
  * A port to communicate binary data over. For example a serial port.
  */
+/*
 @deprecated("Use the io package")
 trait CommunicationPort {
   /**
@@ -35,9 +36,9 @@ trait CommunicationPort {
   def close: MessageSelector[Unit]
 
 }
-
+*/
 /**
  * Message that signals the recival of data by a port.
  * @see CommunicationPort#redirectIncomingTo
  */
-case class DataReceived(on: CommunicationPort, data: Seq[Byte])
+//case class DataReceived(on: CommunicationPort, data: Seq[Byte])
