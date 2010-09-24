@@ -1,16 +1,15 @@
 package ch.inventsoft.scalabase
-package communicationport
+package io
 
-/*
 import org.scalatest._
 import matchers._
 import java.io._
-import oip._
 import process._
+import oip._
 import time._
 
 
-class IOStreamPortSpec extends ProcessSpec with ShouldMatchers {
+class SourceSinkCommunicationPortSpec extends ProcessSpec with ShouldMatchers {
 
   private class TestPortContainer {
     val deviceInput = new PipedInputStream
@@ -37,16 +36,17 @@ class IOStreamPortSpec extends ProcessSpec with ShouldMatchers {
       sleep(delay)
     }
     
-    private class MyIOPort extends IOStreamPort[Unit] {
-      protected[this] override def openStreams = {
-        (portInput, portOutput, ())
-      }
-      override def start(as: SpawnStrategy) = super.start(as)
+    var _port: CommunicationPort[Byte] = null
+    def port = {
+      if (_port == null) throw new IllegalStateException
+      else _port
     }
-    private val _port: MyIOPort = new MyIOPort
-    def port: CommunicationPort = _port
     def start: Unit @processCps = {
-      _port.start(SpawnAsRequiredChild)
+      _port = {
+        val source = InputStreamSource(portInput)
+        val sink = OutputStreamSink(portOutput)
+        CommunicationPort(source, sink)
+      }
     }
     
     def close = {
@@ -62,15 +62,14 @@ class IOStreamPortSpec extends ProcessSpec with ShouldMatchers {
       o
     }
   }
-  implicit def intlist2ByteList(list: List[Byte]) = list.map(_.toByte)
-  implicit def intlist2Byteiterator(list: List[Int]) = list.map(_.toByte).iterator
+  implicit def intlist2ByteList(list: List[Int]) = list.map(_.toByte)
 
 
-  describe("InputOutputStreamBasedPort") {
+  describe("CommunicationPort based on Streams") {
     it_("should be possible to send data to the device") {
       val container = TestPortContainer()
       val port = container.port
-      port.send(1 :: 2 :: 3 :: Nil)
+      port.write(1 :: 2 :: 3 :: Nil).await
       assertEquals(container.readAsDevice(3), 1 :: 2 :: 3 :: Nil)
       container.close
     }
@@ -78,17 +77,38 @@ class IOStreamPortSpec extends ProcessSpec with ShouldMatchers {
       val container = TestPortContainer()
       sleep(500 ms)
       val port = container.port
-      port.send(1 :: 2 :: 3 :: Nil)
+      port.write(1 :: 2 :: 3 :: Nil).await
       assertEquals(container.readAsDevice(3), 1 :: 2 :: 3 :: Nil)
       container.close
     }
     it_("should be possible to send multiple data fragments to the device") {
       val container = TestPortContainer()
       val port = container.port
-      port.send(1 :: 2 :: Nil)
-      port.send(1 :: 3 :: Nil)
-      port.send(1 :: 4 :: Nil)
-      port.send(5 :: Nil)
+      port.write(1 :: 2 :: Nil).await
+      port.write(1 :: 3 :: Nil).await
+      port.write(1 :: 4 :: Nil).await
+      port.write(5 :: Nil).await
+      assertEquals(container.readAsDevice(7), 1 :: 2 :: 1 :: 3 :: 1 :: 4 :: 5 :: Nil)
+      container.close
+    }
+    it_("should be possible to send multiple data fragments to the device using cast (await on last)") {
+      val container = TestPortContainer()
+      val port = container.port
+      port.writeCast(1 :: 2 :: Nil)
+      port.writeCast(1 :: 3 :: Nil)
+      port.writeCast(1 :: 4 :: Nil)
+      port.write(5 :: Nil).await
+      assertEquals(container.readAsDevice(7), 1 :: 2 :: 1 :: 3 :: 1 :: 4 :: 5 :: Nil)
+      container.close
+    }
+    it_("should be possible to send multiple data fragments to the device using cast (sleep)") {
+      val container = TestPortContainer()
+      val port = container.port
+      port.writeCast(1 :: 2 :: Nil)
+      port.writeCast(1 :: 3 :: Nil)
+      port.writeCast(1 :: 4 :: Nil)
+      port.writeCast(5 :: Nil)
+      receiveWithin(200 ms) { case Timeout => }
       assertEquals(container.readAsDevice(7), 1 :: 2 :: 1 :: 3 :: 1 :: 4 :: 5 :: Nil)
       container.close
     }
@@ -96,8 +116,8 @@ class IOStreamPortSpec extends ProcessSpec with ShouldMatchers {
       val container = TestPortContainer()
       val port = container.port
       val count = 100
-      (1 to count).foreach { i =>
-        port.send(1 :: 2 :: 3 :: 4 :: Nil)
+      (1 to count).foreach_cps { i =>
+        port.write(1 :: 2 :: 3 :: 4 :: Nil).await
       }
       container.readAsDevice(count * 4, 2 s)
       container.close
@@ -107,7 +127,8 @@ class IOStreamPortSpec extends ProcessSpec with ShouldMatchers {
       val port = container.port
       val data = 1 :: 2 :: 3 :: Nil map(_.toByte)
       container.sendAsDevice(data)
-      assertEquals(receive { port.receive.option }, Some(data))
+      val r = port.read.receive
+      r should be(Data(data))
       container.close
     }
     it_("should be possible to read all the data from the device at once") {
@@ -120,49 +141,9 @@ class IOStreamPortSpec extends ProcessSpec with ShouldMatchers {
       container.sendAsDevice(d2)
       container.sendAsDevice(d3)
       sleep(200 ms)
-      assertEquals(receive { port.receive.option }, Some(d1 ::: d2 ::: d3)) 
-      container.close
-    }
-    it_("should be possible to redirect the receive data to another process") {
-      val container = TestPortContainer()
-      val port = container.port
-      port.redirectIncomingTo(Some(self))
-      sleep(200 ms)
-      
-      val d1 = 1 :: 2 :: 3 :: Nil map(_.toByte)
-      container.sendAsDevice(d1)
-      receiveWithin(1 s) { 
-        case DataReceived(`port`, data) => assertEquals(data, d1)
-      }
-      
-      val d2 = 10 :: 20 :: 30 :: Nil map(_.toByte)
-      container.sendAsDevice(d2)
-      receiveWithin(1 s) { 
-        case DataReceived(`port`, data) => assertEquals(data, d2)
-      }
-
-      val d3 = 50 :: Nil map(_.toByte)
-      container.sendAsDevice(d3)
-      receiveWithin(1 s) { 
-        case DataReceived(`port`, data) => assertEquals(data, d3)
-      }
-      container.close
-    }
-    it_("should be possible to redirect the already received data (in buffer) to another process") {
-      val container = TestPortContainer()
-      val port = container.port
-      
-      val d1 = 1 :: 2 :: 3 :: Nil map(_.toByte)
-      val d2 = 4 :: 5 :: 6 :: Nil map(_.toByte)
-      container.sendAsDevice(d1)
-      container.sendAsDevice(d2)
-
-      port.redirectIncomingTo(Some(self))
-      receiveWithin(1 s) { 
-        case DataReceived(`port`, data) => assertEquals(data, d1 ::: d2)
-      }
+      val r = port.read.receive
+      r should be(Data(d1 ::: d2 ::: d3))
       container.close
     }
   }
 }
-*/
