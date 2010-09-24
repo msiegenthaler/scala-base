@@ -24,7 +24,7 @@ object Messages {
    *   val y = myselector.map(_ + 1).receive
    *   val z = myselector.receiveOption(10 s)
    */
-  trait Selector[+B] extends PartialFunction[Any,B @processCps] {
+  trait MessageSelector[+B] extends PartialFunction[Any,B @processCps] {
     def receive = ch.inventsoft.scalabase.process.receive(this)
     def receiveWithin(timeout: Duration) = ch.inventsoft.scalabase.process.receiveWithin(timeout)(this)
     def receiveOption(timeout: Duration) = option.receiveWithin(timeout)
@@ -43,7 +43,7 @@ object Messages {
 
     def or[B1>:B](that: PartialFunction[Any,B1]): Selector[B1] = {
       val base = this
-      new Selector[B1] {
+      new MessageSelector[B1] {
         override def apply(v: Any) = {
           if (base.isDefinedAt(v)) base.apply(v)
           else that.apply(v)
@@ -53,7 +53,7 @@ object Messages {
     }
     def map[C](fun: B => C) = {
       val base = this
-      new Selector[C] {
+      new MessageSelector[C] {
         override def apply(v: Any) = {
           val r1 = base(v)
           fun(r1)
@@ -63,7 +63,7 @@ object Messages {
     }
     def map_cps[C](fun: B => C @processCps) = {
       val base = this
-      new Selector[C] {
+      new MessageSelector[C] {
         override def apply(v: Any) = {
           val r1 = base(v)
           fun(r1)
@@ -76,7 +76,7 @@ object Messages {
 
   
   implicit def partialFunctionToSelector[A](fun: PartialFunction[Any,A @processCps]): Selector[A] = {
-    new Selector[A] {
+    new MessageSelector[A] {
       override def apply(v: Any) = fun(v)
       override def isDefinedAt(v: Any) = fun.isDefinedAt(v)
     }
@@ -117,7 +117,7 @@ object Messages {
     override def sendAndSelect(to: Process): Selector[A] @processCps = {
       to ! this
       //a bit complicated because guards won't work properly with cps
-      new Selector[A] {
+      new MessageSelector[A] {
         override def isDefinedAt(value: Any) = {
           if (value.isInstanceOf[SimpleReplyMessage[_]]) {
             value.asInstanceOf[SimpleReplyMessage[A]] isReplyTo MessageWithSimpleReply.this
@@ -148,7 +148,7 @@ object Messages {
       initiatedBy ! Reply(value, this)
     }
     def select: Selector[A] = {
-      new Selector[A] {
+      new MessageSelector[A] {
         override def isDefinedAt(value: Any) = {
           if (value.isInstanceOf[Reply[_]]) {
             value.asInstanceOf[Reply[A]] isForToken RequestToken.this

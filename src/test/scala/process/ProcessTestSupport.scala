@@ -8,16 +8,9 @@ import time._
 
 object ProcessTestSupport {  
   def spawnedTest(body: => Unit @processCps) = {
-    val error = new scala.concurrent.SyncVar[Option[Throwable]]
-    val p = spawn {
-      val test = spawnChild(Monitored)(body)
-      receive {
-        case ProcessExit(`test`) => error.set(None)
-        case ProcessCrash(`test`, reason) => error.set(Some(reason))
-        case ProcessKill(`test`, by, reason) => error.set(Some(new RuntimeException("killed by "+by, reason)))
-      }
+    spawnAndBlock {
+      body
     }
-    error.get.foreach(throw _)
   }
   
   def sleep(time: Duration) = {

@@ -51,7 +51,14 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
           }
         }
         s.get(1000) should be(Some(true))
-      }      
+      }
+      it_("should have a spawnAndReceive") {
+        val sel = spawnAndReceive {
+          (1 to 10).foldLeft(0)(_ + _)
+        }
+        val res = sel.receive
+        res should be(55)
+      }
     }
     /* /////////////////////////// */
     // Receive

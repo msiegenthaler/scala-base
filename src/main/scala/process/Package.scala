@@ -1,6 +1,7 @@
 package ch.inventsoft.scalabase
 
 import scala.util.continuations._
+import scala.concurrent.SyncVar
 import time._
 import executionqueue._
 import process.cps._
@@ -11,12 +12,52 @@ import process.cps._
  */
 package object process {
   type processCps = ProcessCps.processCps
+  type Selector[+A] = process.Messages.MessageSelector[A]
 
   /**
    * Spawns a new process.
    */
   def spawnProcess(executionQueue: ExecutionQueue)(body: => Any @processCps): Process = {
     ProcessCps.spawnProcess(executionQueue)(body)
+  }
+
+  /** Spawn a child process and return a selector on its result */
+  def spawnAndReceive[A](body: => A @processCps, executionQueue: ExecutionQueue = execute, kind: ChildType = Required): Selector[A] @processCps = {
+    import process.Messages._
+    val token = RequestToken.create[A]
+    spawnChildProcess(executionQueue)(kind) {
+      val result = body
+      token.reply(result)
+    }
+    token.select
+  }
+  /**
+   * Spawns a process and blocks while waiting for its result. Only use outside of processes (i.e. to start up the
+   * first process
+   */
+  def spawnAndBlock[A](body: => A @processCps, executionQueue: ExecutionQueue = execute): A = {
+    val result = new SyncVar[Either[A,Throwable]]
+    spawn {
+      import process.Messages._
+      val token = RequestToken.create[A]
+      val child = spawnChildProcess(executionQueue)(Monitored) {
+        val result = body
+        token.reply(result)
+      }
+      receive {
+        case ProcessExit(`child`) => 
+          val r = token.select.receive
+          result.set(Left(r))
+        case ProcessCrash(`child`, reason) =>
+          result.set(Right(reason))
+        case ProcessKill(`child`, by, reason) =>
+          result.set(Right(new RuntimeException("Killed by "+by, reason)))
+      }
+    }
+    result.get match {
+      case Left(result) => result
+      case Right(error) => throw new RuntimeException("Process failed", error)
+    }
   }
   
   /**
