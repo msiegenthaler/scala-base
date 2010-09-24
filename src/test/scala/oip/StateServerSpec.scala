@@ -197,7 +197,13 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
     }
     it_("should support many calls") {
       val server = PeopleStateServer()
-      (1 to 10000).foreach_cps(i => server.addPersonFast("Person "+i))
+      def add(limit: Int, index: Int = 0): Unit @processCps = {
+        if (index < limit) {
+          server.addPersonFast("Person "+index)
+          add(limit, index+1)
+        } else noop
+      }
+      add(10000)
       assertEquals(receiveWithin(10 s)(server.count), 10000)
     }
     
