@@ -14,10 +14,10 @@ trait Source[A] {
    * Read the next fragment of data. Exactly one message is received, if no data is currently available
    * the answer is delayed until the next fragment becomes available.
    */
-  def read: Selector[Read[A]] @processCps
+  def read: Selector[Read[A]] @process
 
   /** Close the source. */
-  def close: Completion @processCps
+  def close: Completion @process
 }
 
 

@@ -11,18 +11,18 @@ import process.cps._
  * Lightweight processes (aka actors). See Process for detailed documentation.
  */
 package object process {
-  type processCps = ProcessCps.processCps
+  type process = ProcessCps.process
   type Selector[+A] = process.Messages.MessageSelector[A]
 
   /**
    * Spawns a new process.
    */
-  def spawnProcess(executionQueue: ExecutionQueue)(body: => Any @processCps): Process = {
+  def spawnProcess(executionQueue: ExecutionQueue)(body: => Any @process): Process = {
     ProcessCps.spawnProcess(executionQueue)(body)
   }
 
   /** Spawn a child process and return a selector on its result */
-  def spawnAndReceive[A](body: => A @processCps, executionQueue: ExecutionQueue = execute, kind: ChildType = Required): Selector[A] @processCps = {
+  def spawnAndReceive[A](body: => A @process, executionQueue: ExecutionQueue = execute, kind: ChildType = Required): Selector[A] @process = {
     import process.Messages._
     val token = RequestToken.create[A]
     spawnChildProcess(executionQueue)(kind) {
@@ -35,7 +35,7 @@ package object process {
    * Spawns a process and blocks while waiting for its result. Only use outside of processes (i.e. to start up the
    * first process
    */
-  def spawnAndBlock[A](body: => A @processCps, executionQueue: ExecutionQueue = execute): A = {
+  def spawnAndBlock[A](body: => A @process, executionQueue: ExecutionQueue = execute): A = {
     val result = new SyncVar[Either[A,Throwable]]
     spawn {
       import process.Messages._
@@ -63,42 +63,42 @@ package object process {
   /**
    * Spawns a new process with the default priority.
    */
-  def spawn(body: => Any @processCps): Process =
+  def spawn(body: => Any @process): Process =
     spawnProcess(execute)(body)
   /**
    * Spawns a new process with background priority.
    */
-  def spawnBackground(body: => Any @processCps): Process = 
+  def spawnBackground(body: => Any @process): Process = 
     spawnProcess(executeInBackground)(body)
   /**
    * Spawns a new process with high priority.
    */
-  def spawnHighPrio(body: => Any @processCps): Process = 
+  def spawnHighPrio(body: => Any @process): Process = 
     spawnProcess(executeHighPrio)(body)
   
   /**
    * Spawns a child process. The process will be linked to the calling process (the parent).
    */
-  def spawnChildProcess(executionQueue: ExecutionQueue)(kind: ChildType)(body: => Any @processCps): Process @processCps = 
+  def spawnChildProcess(executionQueue: ExecutionQueue)(kind: ChildType)(body: => Any @process): Process @process = 
     ProcessCps.spawnChildProcess(executionQueue, kind, body)
     
   /**
    * Spawns a child process with the default priority.
    * The process will be linked to the calling process (the parent).
    */
-  def spawnChild(kind: ChildType)(body: => Any @processCps): Process @processCps =
+  def spawnChild(kind: ChildType)(body: => Any @process): Process @process =
     spawnChildProcess(execute)(kind)(body)
   /**
    * Spawns a child process with background priority.
    * The process will be linked to the calling process (the parent).
    */
-  def spawnBackgroundChild(kind: ChildType)(body: => Any @processCps): Process @processCps =
+  def spawnBackgroundChild(kind: ChildType)(body: => Any @process): Process @process =
     spawnChildProcess(executeInBackground)(kind)(body)
   /**
    * Spawns a child process with high priority.
    * The process will be linked to the calling process (the parent).
    */
-  def spawnHighPrioChild(kind: ChildType)(body: => Any @processCps): Process @processCps =
+  def spawnHighPrioChild(kind: ChildType)(body: => Any @process): Process @process =
     spawnChildProcess(executeHighPrio)(kind)(body)
     
 
@@ -108,7 +108,7 @@ package object process {
    * @param f message processor
    * @return the value returned by the message processor
    */
-  def receive[T](f: PartialFunction[Any,T @processCps]): T @processCps =
+  def receive[T](f: PartialFunction[Any,T @process]): T @process =
     ProcessCps.receive(f)
   /**
    * Receives the next matching message for the process. Blocks until a message is
@@ -118,7 +118,7 @@ package object process {
    * @param f message processor
    * @return the value returned by the message processor
    */
-  def receiveWithin[T](timeout: Duration)(f: PartialFunction[Any,T @processCps]): T @processCps =
+  def receiveWithin[T](timeout: Duration)(f: PartialFunction[Any,T @process]): T @process =
     ProcessCps.receiveWithin(timeout)(f)
   /**
    * Receives the next matching message with a timeout of 0. Does not block, but instead
@@ -126,7 +126,7 @@ package object process {
    * @param f message processor
    * @return the value returned by the message processor
    */
-  def receiveNoWait[T](f: PartialFunction[Any,T @processCps]): T @processCps = 
+  def receiveNoWait[T](f: PartialFunction[Any,T @process]): T @process = 
     ProcessCps.receiveNoWait(f)
     
   /**
@@ -135,21 +135,21 @@ package object process {
    * @param toWatch
    * @return nothing
    */
-  def watch(toWatch: Process): Unit @processCps = ProcessCps.watch(toWatch)
+  def watch(toWatch: Process): Unit @process = ProcessCps.watch(toWatch)
 
   /**
    * @return the the current process (external view)
    */
-  def self: Process @processCps = ProcessCps.self
+  def self: Process @process = ProcessCps.self
   
   /**
    * @return a no-op cps
    */
-  def noop: Unit @processCps = ProcessCps.noop
+  def noop: Unit @process = ProcessCps.noop
   /**
    * @return the value as a cps
    */
-  implicit def valueToCps[A](value: A): A @processCps = ProcessCps.valueToCps(value) 
+  implicit def valueToCps[A](value: A): A @process = ProcessCps.valueToCps(value) 
   
   
   /**

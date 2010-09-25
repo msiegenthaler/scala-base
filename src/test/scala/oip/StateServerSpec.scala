@@ -12,8 +12,8 @@ import Messages._
 
 class StateServerSpec extends ProcessSpec with ShouldMatchers {
   object PeopleStateServer extends SpawnableCompanion[PeopleStateServer] {
-    def apply(): PeopleStateServer @processCps = apply(SpawnAsRequiredChild)
-    def apply(as: SpawnStrategy): PeopleStateServer @processCps = start(as) {
+    def apply(): PeopleStateServer @process = apply(SpawnAsRequiredChild)
+    def apply(as: SpawnStrategy): PeopleStateServer @process = start(as) {
       new PeopleStateServer
     }	  
   }
@@ -61,8 +61,8 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
   case class PeopleState(counter: Int, people: List[String])
   
   object ParentServer extends SpawnableCompanion[ParentServer] {
-    def apply(): ParentServer @processCps = apply(SpawnAsRequiredChild)
-    def apply(as: SpawnStrategy): ParentServer @processCps = start(as) {
+    def apply(): ParentServer @process = apply(SpawnAsRequiredChild)
+    def apply(as: SpawnStrategy): ParentServer @process = start(as) {
       new ParentServer
     }
   }
@@ -197,7 +197,7 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
     }
     it_("should support many calls") {
       val server = PeopleStateServer()
-      def add(limit: Int, index: Int = 0): Unit @processCps = {
+      def add(limit: Int, index: Int = 0): Unit @process = {
         if (index < limit) {
           server.addPersonFast("Person "+index)
           add(limit, index+1)

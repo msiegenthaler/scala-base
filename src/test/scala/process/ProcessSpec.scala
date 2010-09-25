@@ -700,7 +700,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         val shouldSum = c.foldLeft(0)(_ + _)
         val s = new SyncVar[Int]
         val p = spawn {
-          def run(sum: Int): Unit @processCps = {
+          def run(sum: Int): Unit @process = {
             val v = receiveWithin (10 s) {
               case i: Int => Some(sum + i)
               case Timeout => s.set(sum); None
@@ -738,7 +738,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
       it_("should be possible for a process to loop forever using recursion (no stack overflow)") {
         val s = new SyncVar[Int]
         val p = spawn {
-          def run(sum: Int): Unit @processCps = {
+          def run(sum: Int): Unit @process = {
             receive {
               case i: Int => run(sum + i)
               case () => s.set(sum); noop
@@ -748,7 +748,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         }
         val count = 100000
         spawn {
-          def exec(left: Int): Unit @processCps = left match {
+          def exec(left: Int): Unit @process = left match {
             case 0 =>
               p ! ()
               noop
@@ -764,7 +764,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         val count = 1000000
         val r = new SyncVar[Long]
         val p = spawn {
-          def doit(index: Long): Unit @processCps = {
+          def doit(index: Long): Unit @process = {
             val cont = receive {
               case nr: Long => true
               case Exit => r.set(index); false
@@ -774,7 +774,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
           }
           doit(0)
         }
-        def exec(left: Long): Unit @processCps = left match {
+        def exec(left: Long): Unit @process = left match {
           case 0 => ()
           case left =>
             p ! left
@@ -796,7 +796,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
       it_("should be possible to implement a fast ping pong") {
         val count = 1000000
         val p = spawn {
-          def doit: Unit @processCps = {
+          def doit: Unit @process = {
             val proc = receive {
               case proc: Process => Some(proc)
               case Exit => None
@@ -809,7 +809,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
           doit
         }
         val failed = new SyncVar[Boolean]
-        def exec(left: Long): Unit @processCps = left match {
+        def exec(left: Long): Unit @process = left match {
           case 0 =>
             failed.set(false)
           case left =>
@@ -846,7 +846,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
       it_("should have a fast message passing") {
         val count = 100000
         val p = spawn {
-          def doit: Unit @processCps = {
+          def doit: Unit @process = {
             val cont = receive {
               case p2: Process =>
                 p2 ! "hi"
@@ -860,7 +860,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         }
         val duration = new SyncVar[Long]
         spawn {
-          def exec(left: Int): Unit @processCps = left match {
+          def exec(left: Int): Unit @process = left match {
             case 0 => ()
             case left =>
               p ! self
@@ -905,7 +905,7 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         println("Running "+count+" processes with <"+(mem/1048576)+"Mb used (<"+bytesPerProcess+" bytes per process)")
         if (bytesPerProcess > 3000) fail("Too much memory used per process: "+bytesPerProcess+" bytes")
         //Stopping
-        def stop(toStop: List[Process]): Unit @processCps = {
+        def stop(toStop: List[Process]): Unit @process = {
           if (toStop.nonEmpty) {
             toStop.head ! Exit
             stop(toStop.tail)

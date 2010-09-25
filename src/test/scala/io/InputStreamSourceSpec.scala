@@ -262,7 +262,7 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
         val is = new RandomInputStream
         val source = InputStreamSource(is, 1024)
         
-        def readit(left: Int): Unit @processCps = {
+        def readit(left: Int): Unit @process = {
           if (left > 0) {
             val read = source.read.receiveWithin(1 s)
             read match {
@@ -282,7 +282,7 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
     describe("medium long") {
       val string = "The foxy fox jumps the bandwagon in order to get on board the train and have a lot of fun, but then he looses its temper and bites the goose who was piloting the locomotive across the big blue sea"
       val bytes = string.getBytes("UTF-8")
-      def readAll(source: Source[Byte], soFar: Seq[Byte] = Nil): Seq[Byte] @processCps = {
+      def readAll(source: Source[Byte], soFar: Seq[Byte] = Nil): Seq[Byte] @process = {
         val read = source.read.receiveWithin(1 s)
         read match {
           case Data(data) =>

@@ -12,20 +12,20 @@ import process._
 /** Process implementation based on delimited continuations */
 object ProcessCps extends Log with MessageBoxContainer[Any] {
 
-  def spawnProcess(executionQueue: ExecutionQueue)(body: => Any @processCps): Process = {
+  def spawnProcess(executionQueue: ExecutionQueue)(body: => Any @process): Process = {
     ProcessImpl.root(executionQueue, body)
   }
-  def spawnChildProcess(executionQueue: ExecutionQueue, kind: ChildType, body: => Any @processCps): Process @processCps = {
+  def spawnChildProcess(executionQueue: ExecutionQueue, kind: ChildType, body: => Any @process): Process @process = {
     new SpawnChildProcessAction(executionQueue, kind, body).cps
   }
 
   def self = SelfProcessAction.cps
-  def receive[T](fun: PartialFunction[Any,T @processCps]) = new ReceiveProcessAction(fun).cps
-  def receiveWithin[T](timeout: Duration)(fun: PartialFunction[Any,T @processCps]) = {
+  def receive[T](fun: PartialFunction[Any,T @process]) = new ReceiveProcessAction(fun).cps
+  def receiveWithin[T](timeout: Duration)(fun: PartialFunction[Any,T @process]) = {
     if (timeout.isZero) new ReceiveNoWaitProcessAction(fun).cps
     else new ReceiveWithinProcessAction(fun, timeout).cps
   }
-  def receiveNoWait[T](fun: PartialFunction[Any,T @processCps]) = new ReceiveNoWaitProcessAction(fun).cps
+  def receiveNoWait[T](fun: PartialFunction[Any,T @process]) = new ReceiveNoWaitProcessAction(fun).cps
   
   def watch(toWatch: Process) = new WatchProcessAction(toWatch).cps
 
@@ -34,16 +34,16 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
   }
 
   def valueToCps[A](value: A) = new ValueProcessAction(value).cps
-  def noop: Unit @processCps = NoopAction.cps
+  def noop: Unit @process = NoopAction.cps
 
-  type processCps = cps[ProcessAction[Any]]
+  type process = cps[ProcessAction[Any]]
 
   /**
    * Part of a process execution
    */
   sealed trait ProcessAction[T] {
     private[ProcessCps] def run(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler)
-    private[ProcessCps] def cps: T @processCps = shift { cont: (T => ProcessAction[Any]) =>
+    private[ProcessCps] def cps: T @process = shift { cont: (T => ProcessAction[Any]) =>
       flatMap(cont)
     }
     private[ProcessCps] def flatMap[A](next: T => ProcessAction[A]): ProcessAction[A] = {
@@ -122,7 +122,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
    * Support for execution nested CPS'es
    */
   private trait NestingSupport[T] {
-    protected[this] def execNested(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler)(result: => T @processCps): Unit = {
+    protected[this] def execNested(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler)(result: => T @process): Unit = {
       val action: ProcessAction[Any] = reset {
         try {
           val r = result
@@ -178,7 +178,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
   /**
    * ProcessAction spawning a child process.
    */
-  private class SpawnChildProcessAction(executionQueue: ExecutionQueue, kind: ChildType, body: => Any @processCps) extends ProcessAction[Process] {
+  private class SpawnChildProcessAction(executionQueue: ExecutionQueue, kind: ChildType, body: => Any @process) extends ProcessAction[Process] {
     override def run(state: ProcessState, continue: ContinueProcess[Process], flow: ProcessFlowHandler) = {
       val me = state.process 
       val child = ProcessImpl.child(me, kind, executionQueue, body)
@@ -189,7 +189,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
   /**
    * ProcessAction receiving a message matching a partial function.
    */
-  private class ReceiveProcessAction[T](fun: PartialFunction[Any,T @processCps]) extends ProcessAction[T] with NestingSupport[T] {
+  private class ReceiveProcessAction[T](fun: PartialFunction[Any,T @process]) extends ProcessAction[T] with NestingSupport[T] {
     override def run(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler) = {
       val reg = new CaptureRegistrant(fun.isDefinedAt _, (s,m) => execNested(s,continue,flow)(fun(m)), flow)
       reg.register(state)
@@ -198,7 +198,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
   /**
    * ProcessAction receving a message matching a partial function within a certain timeframe.
    */
-  private class ReceiveWithinProcessAction[T](fun: PartialFunction[Any,T @processCps], timeout: Duration) extends ProcessAction[T] with NestingSupport[T] {
+  private class ReceiveWithinProcessAction[T](fun: PartialFunction[Any,T @process], timeout: Duration) extends ProcessAction[T] with NestingSupport[T] {
     override def run(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler) = {
       val messageBox = state.messageBox
       class CaptureRegistrantWithin extends CaptureRegistrant(fun.isDefinedAt _, (s,m) => execNested(s,continue,flow)(fun(m)), flow) {
@@ -245,7 +245,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
   /**
    * ProcessAction receiving a matching message if already present, else Timeout.
    */
-  private class ReceiveNoWaitProcessAction[T](fun: PartialFunction[Any,T @processCps]) extends ProcessAction[T] with NestingSupport[T] {
+  private class ReceiveNoWaitProcessAction[T](fun: PartialFunction[Any,T @process]) extends ProcessAction[T] with NestingSupport[T] {
     override def run(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler) = {
       val reg = new CaptureRegistrant(fun.isDefinedAt _, (s,m) => execNested(s,continue,flow)(fun(m)), flow) {
         override def register(state: ProcessState) = {
@@ -493,10 +493,10 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
    * Implementation of a process.
    */
   private object ProcessImpl {
-    def root(queue: ExecutionQueue, body: => Any @processCps): ProcessInternal = {
+    def root(queue: ExecutionQueue, body: => Any @process): ProcessInternal = {
       new ProcessImpl(queue, RootProcessListener, body)
     }
-    def child(parent: ProcessInternal, childType: ChildType, queue: ExecutionQueue, body: => Any @processCps): ProcessInternal = {
+    def child(parent: ProcessInternal, childType: ChildType, queue: ExecutionQueue, body: => Any @process): ProcessInternal = {
       val tm = childType match {
         case Monitored => new MonitoredChildProcessListener(parent)
         case Required => new RequiredChildProcessListener(parent)
@@ -515,7 +515,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
   private final val pidDealer = new java.util.concurrent.atomic.AtomicLong(0)
 
   private class ProcessImpl(queue_org: ExecutionQueue, listener: ProcessListener) extends Process with ProcessInternal {
-    def this(queue: ExecutionQueue, listener: ProcessListener, body: => Any @processCps) = {
+    def this(queue: ExecutionQueue, listener: ProcessListener, body: => Any @process) = {
       this(queue, listener)
       val toExecute: ProcessAction[Any] = reset {
         firstFun.cps

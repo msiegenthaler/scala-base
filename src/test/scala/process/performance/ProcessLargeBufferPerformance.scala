@@ -53,7 +53,7 @@ object ProcessLargeBufferPerformance extends Log {
       log.trace("Receive messages")
       timer ! StartMessage
 
-      def rcv(count: Int = 0): Unit @processCps = count match {
+      def rcv(count: Int = 0): Unit @process = count match {
         case `msgCount` => ()
         case other =>
           receive { case number: Int => number }

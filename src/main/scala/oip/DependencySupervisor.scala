@@ -32,7 +32,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
   protected[this] def transient[A] = new SpecBuilder1[A](Transient)
   protected[this] def permanent[A] = new SpecBuilder1[A](Permanent)
   protected[this] def temporary[A] = new SpecBuilder1[A](Temporary)
-  protected[this] type SpawnFun = (=> Unit @processCps) => Process @processCps
+  protected[this] type SpawnFun = (=> Unit @process) => Process @process
   private[this] type ValueMap = Map[ChildDefinition[_],_]
 
   private[this] var _definitions: List[ChildDefinition[_]] = Nil
@@ -130,7 +130,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
    * @param toStart in order, first will be started first
    * @param started already started things (order: first is most recently started)
    */
-  private[this] def phaseStart(toStart: List[ChildDefinition[_]], started: List[StartedDefinition[_]]): StartPhaseResult @processCps = {
+  private[this] def phaseStart(toStart: List[ChildDefinition[_]], started: List[StartedDefinition[_]]): StartPhaseResult @process = {
     log.trace("Supervisor: Starting {} children", toStart.size)
     receiveNoWait {
       case ProcessStopped(manager, true) =>
@@ -188,7 +188,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
    * like crashes and terminations and either continues with a restart (phaseRestart) or a
    * shutdown (phaseStop).
    */
-  private[this] def phaseRun(children: List[StartedDefinition[_]]): Unit @processCps = {
+  private[this] def phaseRun(children: List[StartedDefinition[_]]): Unit @process = {
     receive {
       case AddDefinition(definition) =>
         log.warn("Definition added to supervisor after initization phase was over. Ignoring.")
@@ -232,7 +232,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
   /**
    * Stops all children in the order in the list.
    */
-  private[this] def phaseStop(toStop: List[StartedDefinition[_]]): Unit @processCps = toStop match {
+  private[this] def phaseStop(toStop: List[StartedDefinition[_]]): Unit @process = toStop match {
     case child :: rest =>
       child.manager match {
         case Some(manager) =>
@@ -248,7 +248,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
    * @param crashed the one that caused the restart.
    * @param children all running children, still including the crashed one
    */
-  private[this] def phaseRestart(crashed: ChildDefinition[_], children: List[StartedDefinition[_]], stillToStart: List[ChildDefinition[_]]): Option[List[StartedDefinition[_]]] @processCps = {
+  private[this] def phaseRestart(crashed: ChildDefinition[_], children: List[StartedDefinition[_]], stillToStart: List[ChildDefinition[_]]): Option[List[StartedDefinition[_]]] @process = {
     //TODO Implement that in strategy classes...
     //TODO should we abort somewhen (after x unsuccessful restarts or so)?
    
@@ -281,17 +281,17 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
     def hardShutdown = new SpecBuilder2[A](restart, None)
   }
   protected[this] class SpecBuilder2[A](restart: RestartSpecification, timeout: Option[Duration]) {
-    def apply(starter: SpawnFun => A @processCps): ChildDefinition[A] = {
+    def apply(starter: SpawnFun => A @process): ChildDefinition[A] = {
       val wrapper = new ChildDefinition(restart, timeout, starter, ChildIdDealer())
       log.trace("Supervisor: Adding child {}", wrapper.id)
       addDefinition(wrapper)
       wrapper
     }
   }
-  protected[this] class ChildDefinition[A](restart: RestartSpecification, timeout: Option[Duration], starter: SpawnFun => A @processCps, protected[DependencySupervisor] val id: Long) {
+  protected[this] class ChildDefinition[A](restart: RestartSpecification, timeout: Option[Duration], starter: SpawnFun => A @process, protected[DependencySupervisor] val id: Long) {
     def value: A = DependencyProvider.getDependency(this)
     def getValue = GetValueForDefinition(this).sendAndSelect(process)
-    private[DependencySupervisor] def start: (A,SpecifiedProcessManager) @processCps = {
+    private[DependencySupervisor] def start: (A,SpecifiedProcessManager) @process = {
       log.trace("Supervisor: Starting child {}", id)
       val result = ProcessSpawnCollector(spawn _) {
         val process = ProcessSpawnCollector.spawn _
@@ -300,7 +300,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
       log.trace("Supervisor: Started child {}", id)
       result
     }
-    private[this] def spawn(body: => Any @processCps): SpecifiedProcessManager @processCps = {
+    private[this] def spawn(body: => Any @process): SpecifiedProcessManager @process = {
       val specification = new ProcessSpecification {
         override val id = None
         override val restart = ChildDefinition.this.restart 
@@ -332,7 +332,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
     private[this] var _map: Option[ValueMap] = None
     private[this] var _used: List[ChildDefinition[_]] = Nil
     
-    def apply[A](map: ValueMap)(body: => A @processCps): (A, List[ChildDefinition[_]]) @processCps = {
+    def apply[A](map: ValueMap)(body: => A @process): (A, List[ChildDefinition[_]]) @process = {
       assertInSupervisor
       if (_map.isDefined) throw InvalidUsageOfDependencySupervisor("nesting not allowed")
       _map = Some(map)
@@ -361,7 +361,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
    * Responsible for collecting the spawned SpecifiedProcessManager by the external code.
    */
   private[this] object ProcessSpawnCollector {
-    private[this] var _collectFun: Option[(=> Any @processCps) => SpecifiedProcessManager @processCps] = None
+    private[this] var _collectFun: Option[(=> Any @process) => SpecifiedProcessManager @process] = None
     private[this] var _manager: Option[SpecifiedProcessManager] = None
     
     /**
@@ -371,7 +371,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
      * Usage: ProcessSpawnCollector(accordingToSpecification)( 'execute the spawn body' )
      * Returns: The Manager for the spawned process and the value returned by 'inner'
      */
-    def apply[A](spawnFun: (=> Any @processCps) => SpecifiedProcessManager @processCps)(inner: => A @processCps): (A,SpecifiedProcessManager) @processCps = {
+    def apply[A](spawnFun: (=> Any @process) => SpecifiedProcessManager @process)(inner: => A @process): (A,SpecifiedProcessManager) @process = {
       assertInSupervisor
       if (_collectFun.isDefined) throw InvalidUsageOfDependencySupervisor("nesting not allowed")
       _collectFun = Some(spawnFun)
@@ -393,7 +393,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
      * as/inside the spawn-strategy.
      * (SPAWNING)
      */
-    def spawn[A](body: => A @processCps): Process @processCps = {
+    def spawn[A](body: => A @process): Process @process = {
       assertInSupervisor
       _collectFun match {
         case Some(fun) =>
@@ -417,7 +417,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
    *  }
    */
   protected[this] object Spawner extends SpawnStrategy {
-    override def spawn[A](body: => A @processCps): Process @processCps = ProcessSpawnCollector.spawn(body)
+    override def spawn[A](body: => A @process): Process @process = ProcessSpawnCollector.spawn(body)
   }
 }
 

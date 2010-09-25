@@ -27,7 +27,7 @@ trait SpecifiedProcessManager {
    * @param nice
    * @return nothing as soon as the process is fully stopped
    */
-  def stop(nice: Boolean): Completion @processCps
+  def stop(nice: Boolean): Completion @process
   
   override def toString = "Manager for ["+specification+"]["+managedProcess+"]" 
 }
@@ -43,11 +43,11 @@ case class ForceTermination() extends Exception("Forces termination")
 case class CouldNotSpawnChild(reason: Throwable) extends Exception("Could not spawn child", reason)
 
 trait SpecifiedProcessManagerParent {
-  def processStopped(manager: SpecifiedProcessManager, requestsRestart: Boolean): Unit @processCps
+  def processStopped(manager: SpecifiedProcessManager, requestsRestart: Boolean): Unit @process
 }
 
 object SpecifiedProcessManager {
-  def startAsChild(spec: ProcessSpecification, parent: SpecifiedProcessManagerParent): SpecifiedProcessManager @processCps = {
+  def startAsChild(spec: ProcessSpecification, parent: SpecifiedProcessManagerParent): SpecifiedProcessManager @process = {
     val me = self
     val process = spawnChild(Monitored) {
       val child = spawnChild(Monitored) { spec() }
@@ -71,7 +71,7 @@ object SpecifiedProcessManager {
   private case class StopManager(nice: Boolean) extends MessageWithSimpleReply[Unit]
   
   private class SpecifiedProcessManagerImpl(val specification: ProcessSpecification, val parent: SpecifiedProcessManagerParent, process: Process, val managedProcess: Process) extends SpecifiedProcessManager {
-    protected def run: Any @processCps = {
+    protected def run: Any @process = {
       receive {
         case Terminate => doStop(false)()
         case msg: StopManager =>
@@ -90,7 +90,7 @@ object SpecifiedProcessManager {
 
     override def stop(nice: Boolean) = StopManager(nice) sendAndSelect process
     
-    protected[this] def doStop(nice: Boolean)(whenDone: => Unit @processCps) = {
+    protected[this] def doStop(nice: Boolean)(whenDone: => Unit @process) = {
       val niceTimeout = if (nice) specification.shutdownTimeout else None 
       niceTimeout match {
         case Some(timeout) =>

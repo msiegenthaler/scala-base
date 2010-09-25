@@ -171,7 +171,7 @@ class CpsUtilsSpec extends ProcessSpec with ShouldMatchers {
         spawnChild(Required) {
           p ! "Mario"
         }
-        val f0: PartialFunction[Any,String @processCps] = {
+        val f0: PartialFunction[Any,String @process] = {
           case a: String => a
         }
         val f1 = f0.andThen_cps(a => "Hi "+ a)

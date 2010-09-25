@@ -53,7 +53,7 @@ object XmlChunkSource extends SpawnableCompanion[Source[Elem] with Spawnable] {
     protected[this] override def termination(state: State) = source.close.receiveWithin(closeTimeout)
 
     override def read = call(nextChunks(_))
-    protected[this] def nextChunks(state: State): (Read[Elem],State) @processCps = {
+    protected[this] def nextChunks(state: State): (Read[Elem],State) @process = {
       def decode(bytes: Iterable[Byte]) = {
         def decode_(in: ByteBuffer, soFar: Iterable[Char]): Iterable[Char] = {
           val outEstimatedSize: Int = (in.remaining*state.decoder.averageCharsPerByte).round max 2
@@ -121,7 +121,7 @@ object XmlChunkSource extends SpawnableCompanion[Source[Elem] with Spawnable] {
     protected[this] override def termination(state: State) = source.close.receiveWithin(closeTimeout)
 
     override def read = call(nextChunks(_))
-    protected[this] def nextChunks(chunker: XmlChunker): (Read[Elem],XmlChunker) @processCps = {
+    protected[this] def nextChunks(chunker: XmlChunker): (Read[Elem],XmlChunker) @process = {
       val data = readFromUnderlying
       data match {
         case Data(items) =>

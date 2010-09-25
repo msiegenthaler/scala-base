@@ -9,7 +9,7 @@ import time._
 /**
  * Specification of a process. Applying executes the process's body.
  */
-trait ProcessSpecification extends Function0[Unit @processCps] {
+trait ProcessSpecification extends Function0[Unit @process] {
   val id: Option[Symbol]
   def restart: ProcessSpecification.RestartSpecification
   def shutdownTimeout: Option[Duration]
@@ -27,7 +27,7 @@ object ProcessSpecification {
     def killForShutdown = new ProcessSpecification3(id, restart, None)
   }
   class ProcessSpecification3 private[ProcessSpecification](id1: Option[Symbol], restart1: RestartSpecification, shutdownTimeout1: Option[Duration]) {
-    def apply[A](processBody: => A @processCps) = {
+    def apply[A](processBody: => A @process) = {
       new ProcessSpecification {
         override def apply() = {
           processBody

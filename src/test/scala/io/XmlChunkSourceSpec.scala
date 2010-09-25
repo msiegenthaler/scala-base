@@ -506,7 +506,7 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
     }
   }
 
-  def collectAll[A](source: Source[A], soFar: List[Data[A]] = Nil): List[Data[A]] @processCps = {
+  def collectAll[A](source: Source[A], soFar: List[Data[A]] = Nil): List[Data[A]] @process = {
     val read = source.read.receiveWithin(10 s)
     read match {
       case data: Data[A] =>

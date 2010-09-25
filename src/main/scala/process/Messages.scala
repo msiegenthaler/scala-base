@@ -24,15 +24,15 @@ object Messages {
    *   val y = myselector.map(_ + 1).receive
    *   val z = myselector.receiveOption(10 s)
    */
-  trait MessageSelector[+B] extends PartialFunction[Any,B @processCps] {
+  trait MessageSelector[+B] extends PartialFunction[Any,B @process] {
     def receive = ch.inventsoft.scalabase.process.receive(this)
     def receiveWithin(timeout: Duration) = ch.inventsoft.scalabase.process.receiveWithin(timeout)(this)
     def receiveOption(timeout: Duration) = option.receiveWithin(timeout)
-    def await: Unit @processCps = {
+    def await: Unit @process = {
       receive
       noop
     }
-    def await(timeout: Duration): Unit @processCps = {
+    def await(timeout: Duration): Unit @process = {
       receiveWithin(timeout)
       noop
     }
@@ -61,7 +61,7 @@ object Messages {
         override def isDefinedAt(v: Any) = base.isDefinedAt(v)
       }
     }
-    def map_cps[C](fun: B => C @processCps) = {
+    def map_cps[C](fun: B => C @process) = {
       val base = this
       new MessageSelector[C] {
         override def apply(v: Any) = {
@@ -75,7 +75,7 @@ object Messages {
   }
 
   
-  implicit def partialFunctionToSelector[A](fun: PartialFunction[Any,A @processCps]): Selector[A] = {
+  implicit def partialFunctionToSelector[A](fun: PartialFunction[Any,A @process]): Selector[A] = {
     new MessageSelector[A] {
       override def apply(v: Any) = fun(v)
       override def isDefinedAt(v: Any) = fun.isDefinedAt(v)
@@ -96,7 +96,7 @@ object Messages {
   }
   trait MessageWithSelectableReply[R] {
     protected[this] val sender: Process
-    def sendAndSelect(to: Process): Selector[R] @processCps
+    def sendAndSelect(to: Process): Selector[R] @process
   }
   
   /**
@@ -114,7 +114,7 @@ object Messages {
    *    }
    */
   trait MessageWithSimpleReply[A] extends SenderAwareMessage with MessageWithSelectableReply[A] {
-    override def sendAndSelect(to: Process): Selector[A] @processCps = {
+    override def sendAndSelect(to: Process): Selector[A] @process = {
       to ! this
       //a bit complicated because guards won't work properly with cps
       new MessageSelector[A] {
@@ -123,7 +123,7 @@ object Messages {
             value.asInstanceOf[SimpleReplyMessage[A]] isReplyTo MessageWithSimpleReply.this
           } else false
         }
-        override def apply(value: Any): A @processCps = {
+        override def apply(value: Any): A @process = {
           value.asInstanceOf[SimpleReplyMessage[A]].value
         }
       }
@@ -154,7 +154,7 @@ object Messages {
             value.asInstanceOf[Reply[A]] isForToken RequestToken.this
           } else false
         }
-        override def apply(value: Any): A @processCps = {
+        override def apply(value: Any): A @process = {
           value.asInstanceOf[Reply[A]].value
         }
       }
@@ -164,10 +164,10 @@ object Messages {
     }
   }
   object RequestToken {
-    def apply[A](): RequestToken[A] @processCps = {
+    def apply[A](): RequestToken[A] @process = {
       new RequestToken(self)
     }
-    def create[A]: RequestToken[A] @processCps = {
+    def create[A]: RequestToken[A] @process = {
       new RequestToken(self)
     }
   }

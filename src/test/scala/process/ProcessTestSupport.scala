@@ -7,7 +7,7 @@ import time._
 
 
 object ProcessTestSupport {  
-  def spawnedTest(body: => Unit @processCps) = {
+  def spawnedTest(body: => Unit @process) = {
     spawnAndBlock {
       body
     }
@@ -19,7 +19,7 @@ object ProcessTestSupport {
 }
 
 trait ProcessSpec extends Spec {
-  protected[this] def it_(name: String)(body: => Unit @processCps): Unit = it(name) {
+  protected[this] def it_(name: String)(body: => Unit @process): Unit = it(name) {
     ProcessTestSupport.spawnedTest(body)
   }
   

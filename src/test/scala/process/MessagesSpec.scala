@@ -14,7 +14,7 @@ class MessagesSpec extends ProcessSpec with ShouldMatchers{
     private case class GetLoggedDelay(delay: Duration) extends MyServerMessage with MessageWithSimpleReply[String]
     
     private val process = spawn(step(""))
-    private def step(log: String): Unit @processCps = receive {
+    private def step(log: String): Unit @process = receive {
       case Log(text) =>
         if (log.isEmpty) step(text) else step(log+"\n"+text)
       case msg: GetLogged =>

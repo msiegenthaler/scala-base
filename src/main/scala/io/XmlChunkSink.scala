@@ -74,7 +74,7 @@ object XmlChunkSink extends SpawnableCompanion[XmlChunkSink] {
     def outputingBytesTo(sink: Sink[Byte], encoding: Charset = UTF8): Creator3
   }
   trait Creator3 {
-    def apply(as: SpawnStrategy = Spawn.asChild(Required)(executeForBlocking)): XmlChunkSink @processCps
+    def apply(as: SpawnStrategy = Spawn.asChild(Required)(executeForBlocking)): XmlChunkSink @process
   }
 
   def UTF8 = Charset.forName("UTF-8")
@@ -149,7 +149,7 @@ trait XmlChunkSink extends Sink[Elem] with StateServer {
     ()
   }
 
-  protected[this] def writeElems(items: Iterable[Elem]): Unit @processCps = items.foreach_cps { elem =>
+  protected[this] def writeElems(items: Iterable[Elem]): Unit @process = items.foreach_cps { elem =>
     val string = xmlToString(elem)
     writeToSink(string)
   }
@@ -157,7 +157,7 @@ trait XmlChunkSink extends Sink[Elem] with StateServer {
   protected[this] def xmlToString(elem: Elem) = {
     Utility.toXML(x=elem, minimizeTags=true).toString
   }
-  protected[this] def writeToSink(string: String): Unit @processCps
+  protected[this] def writeToSink(string: String): Unit @process
 
   override def close = stopAndWait
 }

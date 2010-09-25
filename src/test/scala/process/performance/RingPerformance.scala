@@ -76,7 +76,7 @@ object RingPerformance extends Log {
   
   
   def startNode(nodeId: Int, timer: Process, messageWasSentAroundRing: Int => Boolean): Process = spawn {
-    def run(next: Process): Unit @processCps = {
+    def run(next: Process): Unit @process = {
       val cont = receive {
         case msg @ StartMessage =>
           timer ! msg
@@ -108,7 +108,7 @@ object RingPerformance extends Log {
   }
   
   def startTimer(reportTo: Duration => Unit): Process = spawn {
-    def timing(t0: Long): Boolean @processCps = receive {
+    def timing(t0: Long): Boolean @process = receive {
       case StopMessage =>
         val duration = System.nanoTime - t0
         reportTo(duration ns)
@@ -117,7 +117,7 @@ object RingPerformance extends Log {
         log.warn("Ignored message in timer-before: "+msg)
         true
     }
-    def before: Unit @processCps = receive {
+    def before: Unit @process = receive {
       case StartMessage =>
         if (timing(System.nanoTime)) before
         else noop

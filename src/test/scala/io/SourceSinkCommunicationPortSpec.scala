@@ -41,7 +41,7 @@ class SourceSinkCommunicationPortSpec extends ProcessSpec with ShouldMatchers {
       if (_port == null) throw new IllegalStateException
       else _port
     }
-    def start: Unit @processCps = {
+    def start: Unit @process = {
       _port = {
         val source = InputStreamSource(portInput)
         val sink = OutputStreamSink(portOutput)
