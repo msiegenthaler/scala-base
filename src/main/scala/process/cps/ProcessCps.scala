@@ -456,6 +456,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
           with LogNormalStopPL with LogKillPL with WarnCrashPL
           with WatcherSupportPL with KillChildrenOnNonNormalPL {
     override def onStart(of: ProcessInternal) = {
+      super.onStart(of)
       log.debug("{} started", of)
     }
   }
@@ -531,7 +532,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
     val queue = new ExecutionQueue {
       override def execute(f: => Unit) = queue_org <-- {
         ExecutionQueues.executionLocal = Some(ProcessImpl.this)
-        f
+        ProcessImpl.this.synchronized(f)
       }
     }
     val messageBox: MessageBox = new MessageBox(queue)
