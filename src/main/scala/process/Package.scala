@@ -100,7 +100,42 @@ package object process {
    */
   def spawnHighPrioChild(kind: ChildType)(body: => Any @process): Process @process =
     spawnChildProcess(executeHighPrio)(kind)(body)
-    
+
+  /**
+   * Spawns a (non-child) process add atomically the new process as a watcher for
+   * the calling process.
+   */
+  def spawnWatcherProcess(executionQueue: ExecutionQueue)(body: => Any @process): Process @process = 
+    ProcessCps.spawnWatcherProcess(executionQueue)(body)
+  /**
+   * Spawns a watcher for the caller with the default priority.
+   * This equals (but in an atomic fashion):
+   * <code>
+   *  val p = self
+   *  val c = spawn {
+   *    watch(p)
+   *    body
+   *  }
+   * </code>
+   */
+  def spawnWatcher(body: => Any @process): Process @process = 
+    spawnWatcherProcess(execute)(body)
+
+  /** Spawns a process watched by the calling process. */
+  def spawnWatchedProcess(executionQueue: ExecutionQueue)(body: => Any @process): Process @process =
+    ProcessCps.spawnWatchedProcess(executionQueue)(body)
+  /**
+   * Spawns a process that watches the calling process (with a default priority).
+   * This equals (but in an atomic fashion):
+   * <code>
+   *  val p = spawn {
+   *    body
+   *  }
+   *  watch(p)
+   * </code>
+   */  
+  def spawnWatched(body: => Any @process): Process @process =
+    spawnWatchedProcess(execute)(body)
 
   /**
    * Receives the next matching message for the process. Blocks until a message is

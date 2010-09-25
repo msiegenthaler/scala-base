@@ -18,6 +18,13 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
   def spawnChildProcess(executionQueue: ExecutionQueue, kind: ChildType, body: => Any @process): Process @process = {
     new SpawnChildProcessAction(executionQueue, kind, body).cps
   }
+  def spawnWatcherProcess(executionQueue: ExecutionQueue)(body: => Any @process): Process @process = {
+    new SpawnWatcherProcessAction(executionQueue, body).cps
+  }
+  def spawnWatchedProcess(executionQueue: ExecutionQueue)(body: => Any @process): Process @process = {
+    new SpawnWatchedProcessAction(executionQueue, body).cps
+  }
+
 
   def self = SelfProcessAction.cps
   def receive[T](fun: PartialFunction[Any,T @process]) = new ReceiveProcessAction(fun).cps
@@ -315,6 +322,33 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
       continue((), s)
     }
   }
+  /**
+   * ProcessAction spawning a proces that watches this process.
+   */
+  private class SpawnWatcherProcessAction(executionQueue: ExecutionQueue, body: => Any @process) extends ProcessAction[Process] {
+    override def run(state: ProcessState, continue: ContinueProcess[Process], flow: ProcessFlowHandler) = {
+      val me = state.process 
+      val process = ProcessImpl.root(
+        queue = executionQueue,
+        body = body, 
+        watched = me :: Nil)
+      continue(process, state.copy(watchers = process :: state.watchers))
+    }
+  }
+
+  /**
+   * ProcessAction spawning a proces that gets watched by this process.
+   */
+  private class SpawnWatchedProcessAction(executionQueue: ExecutionQueue, body: => Any @process) extends ProcessAction[Process] {
+    override def run(state: ProcessState, continue: ContinueProcess[Process], flow: ProcessFlowHandler) = {
+      val me = state.process 
+      val process = ProcessImpl.root(
+        queue = executionQueue,
+        body = body, 
+        watchers = me :: Nil)
+      continue(process, state.copy(watched = process :: state.watched))
+    }
+  }
 
   /** "Management" view onto a process. All declared methods behave like .!() (async, no exeception) */
   private trait ProcessInternal extends Process {
@@ -493,16 +527,26 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
    * Implementation of a process.
    */
   private object ProcessImpl {
-    def root(queue: ExecutionQueue, body: => Any @process): ProcessInternal = {
-      new ProcessImpl(queue, RootProcessListener, body)
+    def root(queue: ExecutionQueue, body: => Any @process, watched: List[ProcessImpl] = Nil, watchers: List[ProcessImpl] = Nil): ProcessInternal = {
+      new ProcessImpl(
+        queue = queue,
+        listener = RootProcessListener,
+        body = body,
+        initialWatched = watched,
+        initialWatchers = watchers)
     }
-    def child(parent: ProcessInternal, childType: ChildType, queue: ExecutionQueue, body: => Any @process): ProcessInternal = {
+    def child(parent: ProcessInternal, childType: ChildType, queue: ExecutionQueue, body: => Any @process, watched: List[ProcessImpl] = Nil, watchers: List[ProcessImpl] = Nil): ProcessInternal = {
       val tm = childType match {
         case Monitored => new MonitoredChildProcessListener(parent)
         case Required => new RequiredChildProcessListener(parent)
         case NotMonitored => new NotMonitoredChildProcessListener(parent)
       }
-      new ProcessImpl(queue, tm, body)
+      new ProcessImpl(
+        queue = queue,
+        listener = tm,
+        body = body,
+        initialWatched = watched,
+        initialWatchers = watchers)
     }
 
     def currentProcess: Option[Process] = {
@@ -515,7 +559,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
   private final val pidDealer = new java.util.concurrent.atomic.AtomicLong(0)
 
   private class ProcessImpl(queue_org: ExecutionQueue, listener: ProcessListener) extends Process with ProcessInternal {
-    def this(queue: ExecutionQueue, listener: ProcessListener, body: => Any @process) = {
+    def this(queue: ExecutionQueue, listener: ProcessListener, body: => Any @process, initialWatchers: List[ProcessInternal], initialWatched: List[ProcessInternal]) = {
       this(queue, listener)
       val toExecute: ProcessAction[Any] = reset {
         firstFun.cps
@@ -524,7 +568,12 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
       }
       queue <-- {
         ExecutionQueues.executionLocal = Some(ProcessImpl.this)
-        toExecute.run(ProcessState(this, Nil, Nil, Nil), IgnoreProcessResult, flowHandler)
+        val initialState = ProcessState(
+          process = this,
+          watched = initialWatched,
+          watchers = initialWatchers,
+          children = Nil)
+        toExecute.run(initialState, IgnoreProcessResult, flowHandler)
       }
     }
 

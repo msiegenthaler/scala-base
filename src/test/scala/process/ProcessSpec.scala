@@ -540,7 +540,120 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         }
         s.get(1000) should be(Some("oO"))
       }
-      
+      it_("should be possible to spawn a watcher process and receive notification about a normal exit") {
+        val s = new SyncVar[String]
+        val c = spawn {
+          val p = self
+          spawnWatcher {
+            p ! ()
+            receive {
+              case ProcessExit(p2) => s.set(p2+" ok")
+            }
+          }
+          receive {
+            case () => ()
+          }
+        }
+        s.get(1000) should be(Option(c+" ok"))
+      }
+      it_("should be possible to spawn a watcher process and receive notification about a normal immediate exit") {
+        (1 to 100).foreach_cps { _ =>
+          val s = new SyncVar[String]
+          val c = spawn {
+            val p = self
+            spawnWatcher {
+              receive {
+                case ProcessExit(p2) => s.set(p2+" ok")
+              }
+            }
+          }
+          s.get(1000) should be(Option(c+" ok"))
+        }
+      }
+      it_("should be possible to spawn a watcher process and receive notification about a crash") {
+        val s = new SyncVar[String]
+        val c = spawn {
+          val p = self
+          spawnWatcher {
+            receive {
+              case ProcessCrash(p2, e) => s.set(p2+" "+e.getMessage)
+            }
+          }
+          throw new RuntimeException("expected")
+        }
+        s.get(1000) should be(Option(c+" expected"))
+      }
+      it_("should be possible to spawn a watcher process and receive notification about a kill") {
+        val s = new SyncVar[String]
+        val c = spawn {
+          val p = self
+          spawnWatcher {
+            receive {
+              case ProcessKill(p2, _, e) => s.set(p2+" "+e.getMessage)
+            }
+          }
+          spawnChild(Required) {
+            throw new RuntimeException("kill")
+          }
+          receive { case "Nothing" => () }
+        }
+        s.get(1000) should be(Option(c+" kill"))
+      }
+      it_("should be possible to spawn a watched process and receive notification about a normal exit") {
+        val s = new SyncVar[String]
+        spawn {
+          val p = spawnWatched {
+            receive {
+              case () => ()
+            }
+          }
+          p ! ()
+          receive {
+            case ProcessExit(`p`) => s.set("ok")
+          }
+        }
+        s.get(1000) should be(Option("ok"))
+      }
+      it_("should be possible to spawn a watched process and receive notification about a normal exit immediately") {
+        val s = new SyncVar[String]
+        spawn {
+          val p = spawnWatched {
+            noop
+          }
+          receive {
+            case ProcessExit(`p`) => s.set("ok")
+          }
+        }
+        s.get(1000) should be(Option("ok"))
+      }
+      it_("should be possible to spawn a watched process and receive notification about a crash") {
+        val s = new SyncVar[String]
+        spawn {
+          val p = spawnWatched {
+            throw new RuntimeException("expected")
+          }
+          receive {
+            case ProcessCrash(`p`, e) => s.set(e.getMessage)
+          }
+        }
+        s.get(1000) should be(Option("expected"))
+      }
+      it_("should be possible to spawn a watched process and receive notification about a kill") {
+        val s = new SyncVar[String]
+        spawn {
+          val p = spawnWatched {
+            spawnChild(Required) {
+              throw new RuntimeException("expected")
+            }
+            receive { case "Never" => () }
+          }
+          receive {
+            case ProcessKill(`p`, _, e) => s.set(e.getMessage)
+          }
+        }
+        s.get(1000) should be(Option("expected"))
+      }
+
       it_("should be that a crashing parent also terminates its children") {
         val s1 = new SyncVar[String]
         val s2 = new SyncVar[String]
