@@ -13,7 +13,7 @@ import time._
 object OutputStreamSink extends SpawnableCompanion[OutputStreamSink] {
   def apply(os: OutputStream, as: SpawnStrategy = Spawn.asChild(Required)(executeForBlocking)) = {
     val sink = new OutputStreamSink {
-      override val output = os
+      override val _output = os
     }
     start(as)(sink)
   }
@@ -25,23 +25,26 @@ object OutputStreamSink extends SpawnableCompanion[OutputStreamSink] {
  */
 trait OutputStreamSink extends Sink[Byte] with StateServer {
   /** The output stream to write to */
-  protected[this] val output: OutputStream
+  protected[this] val _output: OutputStream
   protected[this] val maxWrittenAtATime = 64*1024 // 64k
 
-  protected[this] override type State = Unit
-  protected[this] override def init = noop
+  protected[this] override type State = OutputStream
+  protected[this] override def init = {
+    ResourceManager.forAlreadyOpen(_output, _output.close).receive.resource
+  }
   protected[this] override def termination(state: State) = {
-    output.close
+    //output stream gets closed by its resource manager
+    noop
   }
   
-  override def write(items: Iterable[Byte]) = get { _ =>
-    writeBlocking(items)
+  override def write(items: Iterable[Byte]) = get { output =>
+    writeBlocking(output, items)
   }
-  override def writeCast(items: Iterable[Byte]) = cast { _ =>
-    writeBlocking(items)
-    ()
+  override def writeCast(items: Iterable[Byte]) = cast { output =>
+    writeBlocking(output, items)
+    output
   }
-  protected[this] def writeBlocking(items: Iterable[Byte]): Unit = items match {
+  protected[this] def writeBlocking(output: OutputStream, items: Iterable[Byte]): Unit = items match {
     case array: WrappedArray[Byte] =>
       output.write(array.array)
     case iterable =>

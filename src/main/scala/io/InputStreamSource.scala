@@ -13,7 +13,7 @@ import time._
 object InputStreamSource extends SpawnableCompanion[InputStreamSource] {
   def apply(is: InputStream, bufferSizeBytes: Int = 1024, as: SpawnStrategy = Spawn.asChild(Required)(executeForBlocking)) = {
     val source = new InputStreamSource {
-      override val input = is
+      override val _input = is
       override val bufferSize = bufferSizeBytes
     }
     start(as)(source)
@@ -26,17 +26,21 @@ object InputStreamSource extends SpawnableCompanion[InputStreamSource] {
  */
 trait InputStreamSource extends Source[Byte] with StateServer {
   /** The input stream to read from */
-  protected[this] val input: InputStream
+  protected[this] val _input: InputStream
   /** Max bytes that are read in a single read */
   protected[this] val bufferSize: Int = 1024
 
-  type State = Unit
+  type State = InputStream
 
-  protected[this] override def init = noop
-  protected[this] override def termination(state: State) = input.close
+  protected[this] override def init = {
+    ResourceManager.forAlreadyOpen(_input, _input.close).receive.resource
+  }
+  protected[this] override def termination(state: State) = {
+    //_input gets closed by its resource manager
+    noop
+  }
 
-
-  override def read = get { _ =>
+  override def read = get { input =>
     val buffer = new Array[Byte](bufferSize)
     input.read(buffer) match {
       case -1 => EndOfData

@@ -9,7 +9,7 @@ import oip._
 import time._
 
 
-class SourceSinkCommunicationPortSpec extends ProcessSpec with ShouldMatchers {
+class CommunicationPortSpec extends ProcessSpec with ShouldMatchers {
 
   private class TestPortContainer {
     val deviceInput = new PipedInputStream
@@ -36,16 +36,21 @@ class SourceSinkCommunicationPortSpec extends ProcessSpec with ShouldMatchers {
       sleep(delay)
     }
     
-    var _port: CommunicationPort[Byte] = null
+    var _port: CommunicationPort[Byte,Byte] = null
     def port = {
       if (_port == null) throw new IllegalStateException
       else _port
     }
     def start: Unit @process = {
       _port = {
-        val source = InputStreamSource(portInput)
-        val sink = OutputStreamSink(portOutput)
-        CommunicationPort(source, sink)
+        case class SourceSink(source: Source[Byte], sink: Sink[Byte])
+        CommunicationPort(
+          open = {
+            val source = InputStreamSource(portInput)
+            val sink = OutputStreamSink(portOutput)
+            SourceSink(source,sink)
+          }
+        ).receive
       }
     }
     
@@ -144,6 +149,19 @@ class SourceSinkCommunicationPortSpec extends ProcessSpec with ShouldMatchers {
       val r = port.read.receive
       r should be(Data(d1 ::: d2 ::: d3))
       container.close
+    }
+    it_("should close the port on a close") {
+      val container = TestPortContainer()
+      val port = container.port
+      container.sendAsDevice(1 :: 2 :: 3 :: Nil map(_.toByte))
+      port.write(4 :: 5 :: 6 :: Nil).await
+      port.close.await
+      val rs = port.read.receiveOption(200 ms)
+      rs should be(None)
+      val ws = port.write(1 :: Nil).receiveOption(200 ms)
+      ws should be(None)
+      val cs = port.close.receiveOption(200 ms)
+      cs should be(None)
     }
   }
 }
