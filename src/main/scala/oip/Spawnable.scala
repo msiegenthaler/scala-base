@@ -48,6 +48,12 @@ object SpawnAsMonitoredChild extends SpawnStrategy {
     spawnChild(Monitored)(body)
   }
 }
+object RunInCallerProcess extends SpawnStrategy {
+  override def spawn[A](body: => A @process) = {
+    body
+    self
+  }
+}
 
 object Spawn {
   def asChild(childType: ChildType)(queue: ExecutionQueue = execute) = new SpawnStrategy {

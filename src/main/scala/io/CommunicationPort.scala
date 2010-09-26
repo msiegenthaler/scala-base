@@ -15,16 +15,14 @@ object CommunicationPort {
   def apply[In,Out,X <% SourceSink[In,Out]](
       open: => X @process,
       close: X => Any @process = (x: X) => noop): Selector[CommunicationPort[In,Out]] @process = {
-    val mgrSel = ResourceManager[CommunicationPort[In,Out]](
-      open = {
-        val holder = open
-        new SourceSinkCommunicationPort[In,Out] {
-          override val source = holder.source
-          override val sink = holder.sink
-        }
-      },
-      close = _.close
-    )
+    val port = {
+      val holder = open
+      new SourceSinkCommunicationPort[In,Out] {
+        override val source = holder.source
+        override val sink = holder.sink
+      }
+    }
+    val mgrSel = ResourceManager[CommunicationPort[In,Out]](port, _.close)
     mgrSel.map(_.resource)
   }
   

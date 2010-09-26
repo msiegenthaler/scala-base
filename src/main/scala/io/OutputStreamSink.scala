@@ -30,7 +30,7 @@ trait OutputStreamSink extends Sink[Byte] with StateServer {
 
   protected[this] override type State = OutputStream
   protected[this] override def init = {
-    ResourceManager.forAlreadyOpen(_output, _output.close).receive.resource
+    ResourceManager[OutputStream](_output, _.close).receive.resource
   }
   protected[this] override def termination(output: State) = {
     output.close

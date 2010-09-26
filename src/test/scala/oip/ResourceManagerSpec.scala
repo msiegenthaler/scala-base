@@ -80,7 +80,7 @@ class ResourceManagerSpec extends ProcessSpec with ShouldMatchers {
 
   def makeRM = {
     ResourceManager[ResU](
-      open = {
+      resource = {
         val r = new ResU
         r.init
         r

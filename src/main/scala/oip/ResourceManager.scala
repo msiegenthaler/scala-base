@@ -10,14 +10,17 @@ import executionqueue._
  * Manages a resource by taking care of closing it if the caller process exits.
  */
 object ResourceManager extends log.Log {
-  def apply[A](open: => A @process, close: A => Any @process):
+  /**
+   * 'resource' is executed in the caller process
+   * 'close' is executed in the monitoring process. Exceptions in that code won't affect anybody.
+   */
+  def apply[A](resource: => A @process, close: A => Any @process, openAs: SpawnStrategy = RunInCallerProcess):
       Selector[ResourceManager[A]] @process = {
-    val user = self
     val resourceOpen = RequestToken[ResourceManager[A]]()
+    val user = self
+    val res = resource
     val watcher = spawnWatcher {
       val watcher = self
-      val res = open
-      log debug ("Opened resource {} for {}", res, user)
       val manager = new ResourceManager[A] {
         override def close = Close().sendAndSelect(watcher)
         override val resource = res
@@ -43,13 +46,6 @@ object ResourceManager extends log.Log {
       }
     }
     resourceOpen.select
-  }
-
-  def forAlreadyOpen[A](resource: => A, close: => Any @process, queue: ExecutionQueue = execute): Selector[ResourceManager[A]] @process = {
-    apply[A](
-      open = { resource },
-      close = { _ => close }
-    )
   }
 
   private case class Close() extends MessageWithSimpleReply[Unit]
