@@ -49,16 +49,16 @@ package object process {
           val r = token.select.receive
           result.set(Left(r))
         case ProcessCrash(`child`, reason) =>
-          result.set(Right(reason))
+          result.set(Right(new ProcessCrashedException(child, reason)))
         case ProcessKill(`child`, by, reason) =>
-          result.set(Right(new RuntimeException("Killed by "+by, reason)))
+          result.set(Right(new ProcessKilledException(child, by, reason)))
       }
     }
     result.get match {
       case Left(result) => result
-      case Right(error) => throw new RuntimeException("Process failed", error)
+      case Right(error) => throw error
     }
-  }
+  }                                                                                                  
   
   /**
    * Spawns a new process with the default priority.
@@ -215,4 +215,14 @@ package object process {
   implicit def cpsPartialFunction[A,B,X](fun: PartialFunction[A,B @cps[X]]) = CpsUtils.cpsPartialFunction(fun)
 }
 
-
+package process {
+  case class ProcessCrashedException(process: Process, reason: Throwable)
+       extends RuntimeException(
+         "Process "+process+" crashed: "+reason.getClass.getSimpleName+" "+reason.getMessage,
+         reason)
+    
+  case class ProcessKilledException(process: Process, by: Process, reason: Throwable)
+       extends RuntimeException(
+         "Process "+process+" killed by "+by+": "+reason.getClass.getSimpleName+" "+reason.getMessage,
+         reason)
+}
