@@ -119,12 +119,12 @@ class OutputStreamSinkSpec extends ProcessSpec with ShouldMatchers {
   val data10 = 1 :: 2 :: 3 :: 4 :: 5 :: 6 :: 7 :: 8 :: 9 :: 10 :: Nil map(_.toByte)
   val data1k = (1 to 1024).map(_ % 4).map(_.toByte).toArray
 
-  def check(bos: ByteArrayOutputStream)(data: Iterable[Byte]): Unit = {
+  def check(bos: ByteArrayOutputStream)(data: Seq[Byte]): Unit = {
     val is = bos.toByteArray
     val expected = data.toArray
     is should be(expected)
   }
-  implicit def listToByteIterable(in: List[Int]): Iterable[Byte] = {
+  implicit def listToByteSeq(in: List[Int]): Seq[Byte] = {
     in.map(_.toByte)
   }
   implicit def intsToBytes(in: List[Int]) = in.map(_.toByte)

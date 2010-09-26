@@ -26,7 +26,7 @@ sealed trait Read[+A] {
   def isEnd: Boolean = !isData
 }
 
-final case class Data[+A](items: Iterable[A]) extends Read[A] {
+final case class Data[+A](items: Seq[A]) extends Read[A] {
   override def isData = true
 }
 

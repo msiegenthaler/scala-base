@@ -161,13 +161,13 @@ class XmlChunkSinkSpec extends ProcessSpec with ShouldMatchers {
   }
 
   class CharSink extends Sink[Char] with StateServer {
-    override type State = Iterable[Char]
+    override type State = Seq[Char]
     override def init = Nil
-    override def write(chars: Iterable[Char]) = call { soFar =>
+    override def write(chars: Seq[Char]) = call { soFar =>
       val v = soFar ++ chars
       ((), v)
     }
-    override def writeCast(chars: Iterable[Char]) = cast { soFar =>
+    override def writeCast(chars: Seq[Char]) = cast { soFar =>
       val v = soFar ++ chars
       v
     }

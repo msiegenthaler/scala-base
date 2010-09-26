@@ -17,7 +17,7 @@ trait Sink[A] {
    */
   def write(item: A): Completion @process = write(item :: Nil)
   /** Write a bunch of items */
-  def write(items: Iterable[A]): Completion @process
+  def write(items: Seq[A]): Completion @process
 
   /**
    * Write the item without a way to track the success or a flow control.
@@ -25,7 +25,7 @@ trait Sink[A] {
    */
   def writeCast(item: A): Unit @process = writeCast(item :: Nil)
   /** Write a bunch of item without tracking */
-  def writeCast(items: Iterable[A]): Unit @process
+  def writeCast(items: Seq[A]): Unit @process
 
   /** Close the sink */
   def close: Completion @process

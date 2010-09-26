@@ -409,14 +409,14 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
       }
     }
 
-    def feedChunker(chunker: XmlChunker, rest: Iterable[Char], fragmentSize: Int): XmlChunker = {
+    def feedChunker(chunker: XmlChunker, rest: Seq[Char], fragmentSize: Int): XmlChunker = {
       if (rest.size <= fragmentSize) chunker + rest
       else {
         val (h,t) = rest.splitAt(fragmentSize)
         feedChunker(chunker + h, t, fragmentSize)
       }
     }
-    def feedAndConsume(chunker: XmlChunker, rest: Iterable[Char], fragmentSize: Int, soFar: List[XmlChunk] = Nil): (XmlChunker, List[XmlChunk]) = {
+    def feedAndConsume(chunker: XmlChunker, rest: Seq[Char], fragmentSize: Int, soFar: List[XmlChunk] = Nil): (XmlChunker, List[XmlChunk]) = {
       if (rest.size <= fragmentSize) {
         val nc = chunker + rest
         (nc.consumeAll, soFar ::: nc.chunks)

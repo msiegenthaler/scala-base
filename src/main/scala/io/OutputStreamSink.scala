@@ -36,14 +36,14 @@ trait OutputStreamSink extends Sink[Byte] with StateServer {
     output.close
   }
   
-  override def write(items: Iterable[Byte]) = get { output =>
+  override def write(items: Seq[Byte]) = get { output =>
     writeBlocking(output, items)
   }
-  override def writeCast(items: Iterable[Byte]) = cast { output =>
+  override def writeCast(items: Seq[Byte]) = cast { output =>
     writeBlocking(output, items)
     output
   }
-  protected[this] def writeBlocking(output: OutputStream, items: Iterable[Byte]): Unit = items match {
+  protected[this] def writeBlocking(output: OutputStream, items: Seq[Byte]): Unit = items match {
     case array: WrappedArray[Byte] =>
       output.write(array.array)
     case iterable =>

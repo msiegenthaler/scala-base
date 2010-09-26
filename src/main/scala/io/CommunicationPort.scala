@@ -37,9 +37,9 @@ object CommunicationPort {
     
     override def read = source.read
 
-    override def write(items: Iterable[Out]) = sink.write(items)
+    override def write(items: Seq[Out]) = sink.write(items)
     override def write(item: Out) = sink.write(item)
-    override def writeCast(items: Iterable[Out]) = sink.writeCast(items)
+    override def writeCast(items: Seq[Out]) = sink.writeCast(items)
     override def writeCast(item: Out) = sink.writeCast(item)
 
     override def close = concurrentWithReply {

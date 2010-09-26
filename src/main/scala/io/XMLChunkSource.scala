@@ -54,8 +54,8 @@ object XmlChunkSource extends SpawnableCompanion[Source[Elem] with Spawnable] {
 
     override def read = call(nextChunks(_))
     protected[this] def nextChunks(state: State): (Read[Elem],State) @process = {
-      def decode(bytes: Iterable[Byte]) = {
-        def decode_(in: ByteBuffer, soFar: Iterable[Char]): Iterable[Char] = {
+      def decode(bytes: Seq[Byte]) = {
+        def decode_(in: ByteBuffer, soFar: Seq[Char]): Seq[Char] = {
           val outEstimatedSize: Int = (in.remaining*state.decoder.averageCharsPerByte).round max 2
           val out = CharBuffer.allocate(outEstimatedSize)
           state.decoder.decode(in, out, false) match {
@@ -151,8 +151,8 @@ object XmlChunkSource extends SpawnableCompanion[Source[Elem] with Spawnable] {
  */
 trait XmlChunker {
   /** Process a chunk of data */
-  def push(data: Iterable[Char]): XmlChunker
-  def +(data: Iterable[Char]) = push(data)
+  def push(data: Seq[Char]): XmlChunker
+  def +(data: Seq[Char]) = push(data)
 
   /** Chunks that were discovered (earliest discovered is first in list)*/
   def chunks: List[XmlChunk]
@@ -163,7 +163,7 @@ trait XmlChunker {
 }
 trait XmlChunk {
   /** the content of this chunk as character array */
-  def chars: Iterable[Char]
+  def chars: Seq[Char]
   def string = new String(chars.toArray)
   /** this chunk as xml-data (if parsable), including the namespaces from the context */
   lazy val xml: Option[Elem] = {
@@ -196,13 +196,13 @@ object XmlChunker extends Log {
 
   //TODO max size of parsed stuff (1Mb or so): mostly collected and elementData
 
-  private class XmlChunkImpl(val chars: Iterable[Char], val context: Option[Elem]) extends XmlChunk
+  private class XmlChunkImpl(val chars: Seq[Char], val context: Option[Elem]) extends XmlChunk
 
   private class XmlChunkers(rootDepth: Int) {
     def init: XmlChunker = LookingForElement(Nil, Nil, Nil, 0)
 
-    private case class LookingForElement(parents: List[Elem], chunks: List[XmlChunk], collected: Iterable[Char], depth: Int) extends XmlChunker {
-      override def push(data: Iterable[Char]) = {
+    private case class LookingForElement(parents: List[Elem], chunks: List[XmlChunk], collected: Seq[Char], depth: Int) extends XmlChunker {
+      override def push(data: Seq[Char]) = {
         val (h,t) = data.span(_ != '<')
         val nc = collected ++ h
         if (t.nonEmpty) InElementTag(parents, chunks, nc, depth, Nil).push(t)
@@ -214,8 +214,8 @@ object XmlChunker extends Log {
         case Nil => (None, this)
       }
     }
-    private case class InElementTag(parents: List[Elem], chunks: List[XmlChunk], collected: Iterable[Char], depth: Int, elementData: Iterable[Char]) extends XmlChunker {
-      override def push(data: Iterable[Char]) = {
+    private case class InElementTag(parents: List[Elem], chunks: List[XmlChunk], collected: Seq[Char], depth: Int, elementData: Seq[Char]) extends XmlChunker {
+      override def push(data: Seq[Char]) = {
         val dso = elementData ++ data
         if (dso.take(cdataStart.size).sameElements(cdataStart)) {
           //CDATA start
@@ -241,7 +241,7 @@ object XmlChunker extends Log {
         }
       }
       /** tag = <element> */
-      protected def handleElementOpen(tag: Iterable[Char], chunk: Iterable[Char]): XmlChunker = {
+      protected def handleElementOpen(tag: Seq[Char], chunk: Seq[Char]): XmlChunker = {
         if (depth < rootDepth) {
           parseXml(tag.dropRight(1) ++ "/>") match {
             case Some(elem) =>
@@ -255,12 +255,12 @@ object XmlChunker extends Log {
         } else LookingForElement(parents, chunks, chunk, depth+1)
       }
       /** tag = <element/> */
-      protected def handleElementOpenInlineClose(tag: Iterable[Char], chunk: Iterable[Char]): XmlChunker = {
+      protected def handleElementOpenInlineClose(tag: Seq[Char], chunk: Seq[Char]): XmlChunker = {
         if (depth == rootDepth) LookingForElement(parents, chunks ::: List(mkChunk(chunk)), Nil, depth)
         else LookingForElement(parents, chunks, chunk, depth)
       }
       /** tag = </element> */
-      protected def handleElementClose(tag: Iterable[Char], chunk: Iterable[Char]): XmlChunker = {
+      protected def handleElementClose(tag: Seq[Char], chunk: Seq[Char]): XmlChunker = {
         if (depth <= rootDepth) {
           val newDepth = (depth - 1) max 0
           LookingForElement(parents.drop(1), chunks, Nil, newDepth)
@@ -270,14 +270,14 @@ object XmlChunker extends Log {
         } else LookingForElement(parents, chunks, chunk, depth-1)
       }
       /** inside a cdata section */
-      protected def handleCData(chunk: Iterable[Char]): XmlChunker = {
+      protected def handleCData(chunk: Seq[Char]): XmlChunker = {
         CDataHandler(this, (chunker, data) => {
           val d = chunk ++ data
           LookingForElement(parents, chunker.chunks, d, depth)
         }, cdataStart)
       }
 
-      protected def parseXml(data: Iterable[Char]): Option[Elem] = {
+      protected def parseXml(data: Seq[Char]): Option[Elem] = {
         try {
           val reader = new java.io.CharArrayReader(data.toArray)
           Some(XML.load(reader))
@@ -286,7 +286,7 @@ object XmlChunker extends Log {
           None
         }
       }
-      protected def mkChunk(data: Iterable[Char]): XmlChunk = {
+      protected def mkChunk(data: Seq[Char]): XmlChunk = {
         val root = parents match {
           case value :: Nil => Some(value)
           case first :: rest =>
@@ -303,8 +303,8 @@ object XmlChunker extends Log {
       }
     }
 
-    private case class CDataHandler(context: XmlChunker, onDone: (XmlChunker,Iterable[Char]) => XmlChunker, soFar: Iterable[Char], kept: Iterable[Char] = Nil) extends XmlChunker {
-      override def push(data: Iterable[Char]) = {
+    private case class CDataHandler(context: XmlChunker, onDone: (XmlChunker,Seq[Char]) => XmlChunker, soFar: Seq[Char], kept: Seq[Char] = Nil) extends XmlChunker {
+      override def push(data: Seq[Char]) = {
         matchToCDataEnd(kept ++ data) match {
           case MatchResult(true, cdataAdd, rest) =>
             val cdata = soFar ++ cdataAdd
@@ -313,8 +313,8 @@ object XmlChunker extends Log {
             copy(soFar=soFar ++ h, kept=t)
         }
       }
-      case class MatchResult(matched: Boolean, left: Iterable[Char], right: Iterable[Char])
-      def matchToCDataEnd(data: Iterable[Char], left: Iterable[Char]=Nil): MatchResult = {
+      case class MatchResult(matched: Boolean, left: Seq[Char], right: Seq[Char])
+      def matchToCDataEnd(data: Seq[Char], left: Seq[Char]=Nil): MatchResult = {
         val (h_,t) = data.span(_ != ']')
         val h = left ++ h_
         if (t.nonEmpty) {

@@ -141,15 +141,15 @@ trait XmlChunkSink extends Sink[Elem] with StateServer {
     }
   }
   
-  override def write(items: Iterable[Elem]) = get { _ =>
+  override def write(items: Seq[Elem]) = get { _ =>
     writeElems(items)
   }
-  override def writeCast(items: Iterable[Elem]) = cast { _ =>
+  override def writeCast(items: Seq[Elem]) = cast { _ =>
     writeElems(items)
     ()
   }
 
-  protected[this] def writeElems(items: Iterable[Elem]): Unit @process = items.foreach_cps { elem =>
+  protected[this] def writeElems(items: Seq[Elem]): Unit @process = items.foreach_cps { elem =>
     val string = xmlToString(elem)
     writeToSink(string)
   }
