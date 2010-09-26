@@ -32,9 +32,8 @@ trait OutputStreamSink extends Sink[Byte] with StateServer {
   protected[this] override def init = {
     ResourceManager.forAlreadyOpen(_output, _output.close).receive.resource
   }
-  protected[this] override def termination(state: State) = {
-    //output stream gets closed by its resource manager
-    noop
+  protected[this] override def termination(output: State) = {
+    output.close
   }
   
   override def write(items: Iterable[Byte]) = get { output =>

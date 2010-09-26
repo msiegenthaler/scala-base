@@ -35,9 +35,8 @@ trait InputStreamSource extends Source[Byte] with StateServer {
   protected[this] override def init = {
     ResourceManager.forAlreadyOpen(_input, _input.close).receive.resource
   }
-  protected[this] override def termination(state: State) = {
-    //_input gets closed by its resource manager
-    noop
+  protected[this] override def termination(input: State) = {
+    input.close
   }
 
   override def read = get { input =>
