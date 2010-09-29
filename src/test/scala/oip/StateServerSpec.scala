@@ -11,11 +11,9 @@ import Messages._
 
 
 class StateServerSpec extends ProcessSpec with ShouldMatchers {
-  object PeopleStateServer extends SpawnableCompanion[PeopleStateServer] {
-    def apply(): PeopleStateServer @process = apply(SpawnAsRequiredChild)
-    def apply(as: SpawnStrategy): PeopleStateServer @process = start(as) {
-      new PeopleStateServer
-    }	  
+  object PeopleStateServer {
+    def apply(as: SpawnStrategy = SpawnAsRequiredChild): PeopleStateServer @process = 
+      Spawner.start(new PeopleStateServer, as)
   }
   class PeopleStateServer protected() extends StateServer {
     type State = PeopleState
@@ -60,11 +58,9 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
   }
   case class PeopleState(counter: Int, people: List[String])
   
-  object ParentServer extends SpawnableCompanion[ParentServer] {
-    def apply(): ParentServer @process = apply(SpawnAsRequiredChild)
-    def apply(as: SpawnStrategy): ParentServer @process = start(as) {
-      new ParentServer
-    }
+  object ParentServer {
+    def apply(as: SpawnStrategy = SpawnAsRequiredChild): ParentServer @process = 
+      Spawner.start(new ParentServer, as)
   }
   class ParentServer protected() extends StateServer {
     type State = List[Process]
@@ -232,10 +228,9 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
         parent ! "Terminated"
       }
     }
-    object SendTerminatePeopleStateServer extends SpawnableCompanion[SendTerminatePeopleStateServer] {
-      def apply(parent: Process, as: SpawnStrategy) = start(as) {
-	new SendTerminatePeopleStateServer(parent)
-      }
+    object SendTerminatePeopleStateServer {
+      def apply(parent: Process, as: SpawnStrategy = SpawnAsRequiredChild) =
+	Spawner.start(new SendTerminatePeopleStateServer(parent), as)
     }
 
     it_("should have a way to react to normal termination") {

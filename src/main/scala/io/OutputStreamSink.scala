@@ -10,12 +10,12 @@ import executionqueue._
 import time._
 
 
-object OutputStreamSink extends SpawnableCompanion[OutputStreamSink] {
+object OutputStreamSink {
   def apply(os: OutputStream, as: SpawnStrategy = Spawn.asChild(Required)(executeForBlocking)) = {
     val sink = new OutputStreamSink {
       override val _output = os
     }
-    start(as)(sink)
+    Spawner.start(sink, as)
   }
 }
 

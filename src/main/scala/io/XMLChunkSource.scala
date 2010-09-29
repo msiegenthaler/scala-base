@@ -15,7 +15,7 @@ import time._
  * (default is 1). Usefull i.e. for XMPP communication.
  * @see XmlChunker
  */
-object XmlChunkSource extends SpawnableCompanion[Source[Elem] with Spawnable] {
+object XmlChunkSource {
   type ChunkFun = XmlChunk => Option[Elem]
   def returnChunksOnly(chunk: XmlChunk) =  chunk.xml
   def rootedChunks(chunk: XmlChunk) = chunk.xmlNoContext flatMap { xml => chunk.context.map { context =>
@@ -23,22 +23,22 @@ object XmlChunkSource extends SpawnableCompanion[Source[Elem] with Spawnable] {
     context.copy(child=nc)
   }}
 
-  def fromBytes(byteSource: Source[Byte], encoding: Charset, nodeDepth: Int = 1, chunkFun: ChunkFun = returnChunksOnly _, as: SpawnStrategy = SpawnAsRequiredChild) = {
+  def fromBytes(byteSource: Source[Byte], encoding: Charset, nodeDepth: Int = 1, chunkFun: ChunkFun = returnChunksOnly _, as: SpawnStrategy = SpawnAsRequiredChild): Source[Elem] @process = {
     val xmlSource = new ByteXmlChunkSource {
       override protected val source = byteSource
       override protected val depth = nodeDepth
       override protected val charset = encoding
       override protected def mapFun(chunk: XmlChunk) = chunkFun(chunk)
     }
-    start(as)(xmlSource)
+    Spawner.start(xmlSource, as)
   }
-  def fromChars(charSource: Source[Char], nodeDepth: Int = 1, chunkFun: ChunkFun = returnChunksOnly _, as: SpawnStrategy = SpawnAsRequiredChild) = {
+  def fromChars(charSource: Source[Char], nodeDepth: Int = 1, chunkFun: ChunkFun = returnChunksOnly _, as: SpawnStrategy = SpawnAsRequiredChild): Source[Elem] @process = {
     val xmlSource = new CharXmlChunkSource {
       override protected val source = charSource
       override protected val depth = nodeDepth
       override protected def mapFun(chunk: XmlChunk) = chunkFun(chunk)
     }
-    start(as)(xmlSource)
+    Spawner.start(xmlSource, as)
   }
 
   private trait ByteXmlChunkSource extends Source[Elem] with StateServer {

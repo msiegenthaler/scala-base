@@ -14,13 +14,18 @@ import time._
  * Sink that writes an XML-document. The root-element is statically defined and all the Elems sent to the sink are added under that
  * root. When the sink is closed the root-element will be closed.
  */
-object XmlChunkSink extends SpawnableCompanion[XmlChunkSink] {
+object XmlChunkSink {
   def withRoot(root: Elem): Creator1 = new Creator1 {
     override def addingChunksUnder(parent: Elem) = {
-      val realParent = findEqualElement(root, parent).getOrElse(throw new IllegalArgumentException("parent not found under root"))
+      val realParent = {
+        findEqualElement(root, parent).
+          getOrElse(throw new IllegalArgumentException("parent not found under root"))
+      }
       new Creator2 {
-        override def outputingBytesTo(sink: Sink[Byte], encoding: Charset = UTF8) = createByte(realParent, sink, encoding)
-        override def outputingCharsTo(sink: Sink[Char]) = createChar(realParent, sink)
+        override def outputingBytesTo(sink: Sink[Byte], encoding: Charset = UTF8) =
+          createByte(realParent, sink, encoding)
+        override def outputingCharsTo(sink: Sink[Char]) =
+          createChar(realParent, sink)
       }
     }
     private def findEqualElement(elem: Elem, toFind: Elem): Option[Elem] = {
@@ -46,7 +51,7 @@ object XmlChunkSink extends SpawnableCompanion[XmlChunkSink] {
         override val sink = s
         override val encoding = enc
       }
-      new Spawner(sink)
+      new Creator3Impl(sink)
     }
     def createChar(parent: Elem, s: Sink[Char]) = {
       val r = root
@@ -55,14 +60,14 @@ object XmlChunkSink extends SpawnableCompanion[XmlChunkSink] {
         override val chunkParent = parent
         override val sink = s
       }
-      new Spawner(sink)
+      new Creator3Impl(sink)
     }
     def findChunkParent = root
   }
 
-  private class Spawner(instance: XmlChunkSink) extends Creator3 with SpawnableCompanion[XmlChunkSink] {
-    def apply(as: SpawnStrategy = Spawn.asChild(Required)(executeForBlocking)) = {
-      start(as)(instance)
+  private class Creator3Impl(instance: XmlChunkSink) extends Creator3 {
+    def apply(as: SpawnStrategy = SpawnAsRequiredChild) = {
+      Spawner.start(instance, as)
     }
   }
 
@@ -74,7 +79,7 @@ object XmlChunkSink extends SpawnableCompanion[XmlChunkSink] {
     def outputingBytesTo(sink: Sink[Byte], encoding: Charset = UTF8): Creator3
   }
   trait Creator3 {
-    def apply(as: SpawnStrategy = Spawn.asChild(Required)(executeForBlocking)): XmlChunkSink @process
+    def apply(as: SpawnStrategy = SpawnAsRequiredChild): XmlChunkSink @process
   }
 
   def UTF8 = Charset.forName("UTF-8")

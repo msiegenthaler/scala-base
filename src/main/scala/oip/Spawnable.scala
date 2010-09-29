@@ -9,7 +9,9 @@ import process._
  * Class that is spawned as its own process. 
  */
 trait Spawnable {
-  protected[oip] def start(as: SpawnStrategy) = {
+  private[this] val startMutex: AnyRef = new Object()
+  protected[oip] def start(as: SpawnStrategy) = startMutex.synchronized {
+    if (_process.isSet) throw new IllegalStateException("already started")
     val p = as.spawn(body)
     _process.set(p)
   }
@@ -18,12 +20,13 @@ trait Spawnable {
 
   protected[this] def body: Unit @process
 }
-trait SpawnableCompanion[+A <: Spawnable] {
-  protected[this] def start(as: SpawnStrategy)(what: A) = {
-    what.start(as)
-    what
+
+object Spawner {
+  def start[A <: Spawnable](spawnable: A, as: SpawnStrategy): A @process = {
+    spawnable.start(as)
+    spawnable
   }
-}
+}  
 
 
 /**

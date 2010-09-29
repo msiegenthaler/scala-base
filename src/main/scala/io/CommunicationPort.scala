@@ -7,44 +7,66 @@ import oip._
 
 
 /** Port for bidirectional communication with another party. */
-trait CommunicationPort[In,Out] extends Sink[Out] with Source[In]
+trait CommunicationPort[In,Out] extends Source[In] with Sink[Out]
 
 
 object CommunicationPort {
-  /** Creates a communication port containing a source and a sink */
-  def apply[In,Out,X <% SourceSink[In,Out]](
-      open: => X @process,
-      close: X => Any @process = (x: X) => noop): Selector[CommunicationPort[In,Out]] @process = {
-    val port = {
-      val holder = open
-      new SourceSinkCommunicationPort[In,Out] {
-        override val source = holder.source
-        override val sink = holder.sink
-      }
+  def apply[In,Out,X <: PortState[In,Out]](
+      open: () => X @process,
+      close: X => Unit @process,
+      as: SpawnStrategy = SpawnAsRequiredChild): Selector[CommunicationPort[In,Out]] @process = {
+
+    val token = RequestToken[CommunicationPort[In,Out]]
+    as.spawn {
+      val state = open()
+      val port = createPort[In,Out,X](state)
+      token.reply(port)
+      waitForTermination[In,Out,X](state, close)
     }
-    val mgrSel = ResourceManager[CommunicationPort[In,Out]](port, _.close)
-    mgrSel.map(_.resource)
+    token.select
   }
-  
-  type SourceSink[In,Out] = {
+
+  private def createPort[In,Out,X <: PortState[In,Out]](state: X) = {
+    val p = self
+    val port = new SimpleCommunicationPort[In,Out] {
+      override val process = p
+      override val source = state.source
+      override val sink = state.sink
+    }
+    port
+  }
+  private def waitForTermination[In,Out,X <: PortState[In,Out]](state: X, close: X => Unit @process) = {
+    receive {
+      case msg: StopPort =>
+        close(state)
+      msg.reply(())
+    }
+  }
+
+
+  private trait SimpleCommunicationPort[In,Out] extends CommunicationPort[In,Out]
+      with ConcurrentObject {
+    protected[this] val process: Process
+    protected[this] val source: Source[In]
+    protected[this] val sink: Sink[Out]
+
+    override def read = source.read
+
+    override def write(data: Seq[Out]) = sink.write(data)
+    override def write(data: Out) = sink.write(data)
+    override def writeCast(data: Seq[Out]) = sink.writeCast(data)
+    override def writeCast(data: Out) = sink.writeCast(data)
+
+    override def close = {
+      StopPort().sendAndSelect(process)
+    }
+  }
+  private case class StopPort() extends MessageWithSimpleReply[Unit]
+
+
+  type PortState[In,Out] = {
     val source: Source[In]
     val sink: Sink[Out]
   }
-
-  private trait SourceSinkCommunicationPort[In,Out] extends CommunicationPort[In,Out] with oip.ConcurrentObject {
-    protected[this] val source: Source[In]
-    protected[this] val sink: Sink[Out]
-    
-    override def read = source.read
-
-    override def write(items: Seq[Out]) = sink.write(items)
-    override def write(item: Out) = sink.write(item)
-    override def writeCast(items: Seq[Out]) = sink.writeCast(items)
-    override def writeCast(item: Out) = sink.writeCast(item)
-
-    override def close = concurrentWithReply {
-      val l = source.close :: sink.close :: Nil
-      l.foreach_cps(_.await)
-    }
-  }
 }
+

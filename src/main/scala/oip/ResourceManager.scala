@@ -14,10 +14,10 @@ object ResourceManager extends log.Log {
    * 'resource' is executed in the caller process
    * 'close' is executed in the monitoring process. Exceptions in that code won't affect anybody.
    */
-  def apply[A](resource: => A @process, close: A => Any @process, openAs: SpawnStrategy = RunInCallerProcess):
+  def apply[A](resource: => A @process, close: A => Any @process):
       Selector[ResourceManager[A]] @process = {
     val resourceOpen = RequestToken[ResourceManager[A]]()
-    val user = self
+    val caller = self
     val res = resource
     val watcher = spawnWatcher {
       val watcher = self
@@ -28,20 +28,20 @@ object ResourceManager extends log.Log {
       resourceOpen.reply(manager)
 
       def doClose(reason: => String) = {
-        log.debug("Closing resource {} for {}: {}", res, user, reason)
+        log.debug("Closing resource {} for {}: {}", res, caller, reason)
         close(res)
-        log debug ("Closed resource {} for {}", res, user)
+        log debug ("Closed resource {} for {}", res, caller)
       }
 
       receive {
         case closeMsg: Close =>
           doClose("as per request")
           closeMsg.reply(())
-        case ProcessExit(`user`) =>
+        case ProcessExit(`caller`) =>
           doClose("normal exit")
-        case ProcessCrash(`user`, _) =>
+        case ProcessCrash(`caller`, _) =>
           doClose("crash")
-        case ProcessKill(`user`, _, _) =>
+        case ProcessKill(`caller`, _, _) =>
           doClose("kill")
       }
     }

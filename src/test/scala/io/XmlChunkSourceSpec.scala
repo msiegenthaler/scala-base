@@ -527,9 +527,9 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
     }
     override def close = stopAndWait
   }
-  object CharsFromStringSource extends SpawnableCompanion[CharsFromStringSource] {
+  object CharsFromStringSource {
     def apply(string: String, perRequest: Int = 10) =
-      start(SpawnAsRequiredChild)(new CharsFromStringSource(string, perRequest))
+      Spawner.start(new CharsFromStringSource(string, perRequest), SpawnAsRequiredChild)
   }
   class BytesFromStringSource(string: String, readPerRequest: Int = 10) extends Source[Byte] with StateServer {
     override type State = Seq[Byte]
@@ -543,9 +543,9 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
     }
     override def close = stopAndWait
   }
-  object BytesFromStringSource extends SpawnableCompanion[BytesFromStringSource] {
+  object BytesFromStringSource {
     def apply(string: String, perRequest: Int = 10) =
-      start(SpawnAsRequiredChild)(new BytesFromStringSource(string, perRequest))
+      Spawner.start(new BytesFromStringSource(string, perRequest), SpawnAsRequiredChild)
   }
 
 

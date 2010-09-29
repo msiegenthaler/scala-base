@@ -178,10 +178,9 @@ class XmlChunkSinkSpec extends ProcessSpec with ShouldMatchers {
     override def close = get(_ => ())
     def shutdown = stopAndWait
   }
-  object CharSink extends SpawnableCompanion[CharSink] {
-    def apply() = {
-      start(SpawnAsRequiredChild)(new CharSink)
-    }
+  object CharSink {
+    def apply() = 
+      Spawner.start(new CharSink, SpawnAsRequiredChild)
   }
 }
 

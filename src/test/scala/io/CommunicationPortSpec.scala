@@ -44,13 +44,20 @@ class CommunicationPortSpec extends ProcessSpec with ShouldMatchers {
     def start: Unit @process = {
       _port = {
         case class SourceSink(source: Source[Byte], sink: Sink[Byte])
-        CommunicationPort(
-          open = {
+        CommunicationPort[Byte,Byte,SourceSink](
+          open = { () =>
             val source = InputStreamSource(portInput)
             val sink = OutputStreamSink(portOutput)
-            SourceSink(source,sink)
-          }
-        ).receive
+            SourceSink(source, sink)
+          },
+          close = { (ss: SourceSink) =>
+            val s1 = ss.sink.close
+            val s2 = ss.source.close
+            s1.await
+            s2.await
+          },
+          as = SpawnAsRequiredChild
+        ).receiveWithin(1 s)
       }
     }
     

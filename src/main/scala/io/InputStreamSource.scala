@@ -10,13 +10,13 @@ import executionqueue._
 import time._
 
 
-object InputStreamSource extends SpawnableCompanion[InputStreamSource] {
+object InputStreamSource {
   def apply(is: InputStream, bufferSizeBytes: Int = 1024, as: SpawnStrategy = Spawn.asChild(Required)(executeForBlocking)) = {
     val source = new InputStreamSource {
       override val _input = is
       override val bufferSize = bufferSizeBytes
     }
-    start(as)(source)
+    Spawner.start(source, as)
   }
 }
 
