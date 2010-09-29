@@ -12,13 +12,13 @@ trait CommunicationPort[In,Out] extends Source[In] with Sink[Out]
 
 object CommunicationPort {
   def apply[In,Out,X <: PortState[In,Out]](
-      open: () => X @process,
+      open: => X @process,
       close: X => Unit @process,
       as: SpawnStrategy = SpawnAsRequiredChild): Selector[CommunicationPort[In,Out]] @process = {
 
     val token = RequestToken[CommunicationPort[In,Out]]
     as.spawn {
-      val state = open()
+      val state = open
       val port = createPort[In,Out,X](state)
       token.reply(port)
       waitForTermination[In,Out,X](state, close)

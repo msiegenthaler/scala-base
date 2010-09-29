@@ -45,7 +45,7 @@ class CommunicationPortSpec extends ProcessSpec with ShouldMatchers {
       _port = {
         case class SourceSink(source: Source[Byte], sink: Sink[Byte])
         CommunicationPort[Byte,Byte,SourceSink](
-          open = { () =>
+          open = {
             val source = InputStreamSource(portInput)
             val sink = OutputStreamSink(portOutput)
             SourceSink(source, sink)
