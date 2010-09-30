@@ -11,8 +11,8 @@ import time._
 
 
 /**
- * Sink that writes an XML-document. The root-element is statically defined and all the Elems sent to the sink are added under that
- * root. When the sink is closed the root-element will be closed.
+ * Sink that writes an XML-document. The root-element is statically defined and all the Elems sent to the
+ * sink are added under that root. When the sink is closed the root-element will be closed.
  */
 object XmlChunkSink {
   def withRoot(root: Elem): Creator1 = new Creator1 {
@@ -22,9 +22,9 @@ object XmlChunkSink {
           getOrElse(throw new IllegalArgumentException("parent not found under root"))
       }
       new Creator2 {
-        override def outputingBytesTo(sink: Sink[Byte], encoding: Charset = UTF8) =
+        override def outputingBytesTo(sink: => Sink[Byte] @process, encoding: Charset = UTF8) =
           createByte(realParent, sink, encoding)
-        override def outputingCharsTo(sink: Sink[Char]) =
+        override def outputingCharsTo(sink: => Sink[Char] @process) =
           createChar(realParent, sink)
       }
     }
@@ -41,31 +41,31 @@ object XmlChunkSink {
       }
     }
 
-    override def outputingCharsTo(sink: Sink[Char]) = createChar(findChunkParent, sink)
-    override def outputingBytesTo(sink: Sink[Byte], encoding: Charset = UTF8) = createByte(findChunkParent, sink, encoding)
-    def createByte(parent: Elem, s: Sink[Byte], enc: Charset) = {
+    override def outputingCharsTo(sink: => Sink[Char] @process) = createChar(findChunkParent, sink)
+    override def outputingBytesTo(sink: => Sink[Byte] @process, encoding: Charset = UTF8) = createByte(findChunkParent, sink, encoding)
+    def createByte(parent: Elem, s: => Sink[Byte] @process, enc: Charset) = {
       val r = root
       val sink = new XmlChunkByteSink {
         override val root = r
         override val chunkParent = parent
-        override val sink = s
         override val encoding = enc
+        override def openSink = s
       }
       new Creator3Impl(sink)
     }
-    def createChar(parent: Elem, s: Sink[Char]) = {
+    def createChar(parent: Elem, s: => Sink[Char] @process) = {
       val r = root
       val sink = new XmlChunkCharSink {
         override val root = r
         override val chunkParent = parent
-        override val sink = s
+        override def openSink = s
       }
       new Creator3Impl(sink)
     }
     def findChunkParent = root
   }
 
-  private class Creator3Impl(instance: XmlChunkSink) extends Creator3 {
+  private class Creator3Impl[T](instance: XmlChunkSink[T]) extends Creator3[T] {
     def apply(as: SpawnStrategy = SpawnAsRequiredChild) = {
       Spawner.start(instance, as)
     }
@@ -75,55 +75,48 @@ object XmlChunkSink {
     def addingChunksUnder(parent: Elem): Creator2
   }
   trait Creator2 {
-    def outputingCharsTo(sink: Sink[Char]): Creator3
-    def outputingBytesTo(sink: Sink[Byte], encoding: Charset = UTF8): Creator3
+    def outputingCharsTo(sink: => Sink[Char] @process): Creator3[Char]
+    def outputingBytesTo(sink: => Sink[Byte] @process, encoding: Charset = UTF8): Creator3[Byte]
   }
-  trait Creator3 {
-    def apply(as: SpawnStrategy = SpawnAsRequiredChild): XmlChunkSink @process
+  trait Creator3[T] {
+    def apply(as: SpawnStrategy = SpawnAsRequiredChild): XmlChunkSink[T] @process
   }
 
   def UTF8 = Charset.forName("UTF-8")
 }
 
-trait XmlChunkByteSink extends XmlChunkSink {
+
+trait XmlChunkCharSink extends XmlChunkSink[Char] {
+  protected[this] override def convertToTargetType(data: Seq[Char]) = data
+}
+trait XmlChunkByteSink extends XmlChunkSink[Byte] {
   protected val encoding: Charset
-
-  override protected type To = Byte
-  override protected[this] def writeHead = {
-    writeToSink("<?xml version=\"1.0\" encoding=\""+encoding.toString+"\"?>\n")
-  }
-  override protected[this] def writeToSink(string: String) = {
-    val bytes = string.getBytes(encoding)
-    sink.write(bytes).await
-  }
+  protected[this] override def head =
+    "<?xml version=\"1.0\" encoding=\""+encoding.toString+"\"?>\n"
+  protected[this] override def convertToTargetType(data: Seq[Char]) =
+    data.mkString.getBytes(encoding)
 }
-trait XmlChunkCharSink extends XmlChunkSink {
-  override protected type To = Char
-  override protected[this] def writeToSink(string: String) = {
-    sink.write(string).await
-  }
-}
-
-trait XmlChunkSink extends Sink[Elem] with StateServer {
-  protected type To
-  protected val sink: Sink[To]
+trait XmlChunkSink[Target] extends TransformingSink[Elem,Target,Seq[Char]] {
   protected val root: Elem
   /** must be an (indirect) child of root */
   protected val chunkParent: Elem
-  protected val closeTimeout = 20 s
 
-  protected[this] override type State = Unit
-  protected[this] override def init = {
-    writeHead
-    val (before,_) = mkBeforeAfterFragment
-    writeToSink(before)
-    noop
+  protected[this] def convertToTargetType(data: Seq[Char]): Seq[Target]
+
+  protected[this] def head: Seq[Char] = ""
+  protected[this] override def createAccumulator = {
+    val h: Seq[Char] = head ++ mkBeforeAfterFragment._1
+    h
   }
-  protected[this] def writeHead = noop
-  protected[this] override def termination(state: State) = {
-    val (_,after) = mkBeforeAfterFragment
-    writeToSink(after)
-    sink.close.await(closeTimeout)
+
+  protected[this] override def process(h: Seq[Char], chunks: Seq[Elem]) = {
+    val d = chunks.foldLeft(h)(_ ++ serialize(_))
+    val out = convertToTargetType(d)
+    (out, Nil)
+  }
+  protected[this] override def processEnd(h: Seq[Char]) = {
+    val d = h ++ mkBeforeAfterFragment._2
+    convertToTargetType(d)
   }
 
   protected[this] def mkBeforeAfterFragment = {
@@ -145,24 +138,7 @@ trait XmlChunkSink extends Sink[Elem] with StateServer {
       elem.copy(child=nc)
     }
   }
-  
-  override def write(items: Seq[Elem]) = get { _ =>
-    writeElems(items)
-  }
-  override def writeCast(items: Seq[Elem]) = cast { _ =>
-    writeElems(items)
-    ()
-  }
-
-  protected[this] def writeElems(items: Seq[Elem]): Unit @process = items.foreach_cps { elem =>
-    val string = xmlToString(elem)
-    writeToSink(string)
-  }
-
-  protected[this] def xmlToString(elem: Elem) = {
+  protected[this] def serialize(elem: Elem): Seq[Char] = {
     Utility.toXML(x=elem, minimizeTags=true).toString
   }
-  protected[this] def writeToSink(string: String): Unit @process
-
-  override def close = stopAndWait
 }
