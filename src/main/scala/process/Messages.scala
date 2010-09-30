@@ -41,7 +41,7 @@ object Messages {
       case Timeout => None
     }
 
-    def or[B1>:B](that: PartialFunction[Any,B1]): Selector[B1] = {
+    def or[B1>:B](that: PartialFunction[Any,B1 @process]): Selector[B1] = {
       val base = this
       new MessageSelector[B1] {
         override def apply(v: Any) = {
