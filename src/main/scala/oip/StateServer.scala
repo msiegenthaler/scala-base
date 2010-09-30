@@ -55,6 +55,16 @@ trait StateServer extends Spawnable with Log with Process {
       }
     }
   }
+  protected[this] def asyncCast[R](fun: State => Any @process): Unit @process = {
+    this ! new ModifyStateMessage {
+      override def execute(state: State) = {
+        spawnChild(Required) {
+          fun(state)
+        }
+        state
+      }
+    }
+  }
   protected def stop = this ! Terminate
   protected def stopAndWait: Completion @process = {
     async { state =>
