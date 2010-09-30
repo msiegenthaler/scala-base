@@ -23,77 +23,63 @@ object XmlChunkSource {
     context.copy(child=nc)
   }}
 
-  def fromBytes(byteSource: Source[Byte], encoding: Charset, nodeDepth: Int = 1, chunkFun: ChunkFun = returnChunksOnly _, as: SpawnStrategy = SpawnAsRequiredChild): Source[Elem] @process = {
+  def fromBytes(byteSource: => Source[Byte] @process, encoding: Charset, nodeDepth: Int = 1, chunkFun: ChunkFun = returnChunksOnly _, as: SpawnStrategy = SpawnAsRequiredChild): Source[Elem] @process = {
     val xmlSource = new ByteXmlChunkSource {
-      override protected val source = byteSource
+      override protected def openSource = byteSource
       override protected val depth = nodeDepth
       override protected val charset = encoding
       override protected def mapFun(chunk: XmlChunk) = chunkFun(chunk)
     }
     Spawner.start(xmlSource, as)
   }
-  def fromChars(charSource: Source[Char], nodeDepth: Int = 1, chunkFun: ChunkFun = returnChunksOnly _, as: SpawnStrategy = SpawnAsRequiredChild): Source[Elem] @process = {
+  def fromChars(charSource: => Source[Char] @process, nodeDepth: Int = 1, chunkFun: ChunkFun = returnChunksOnly _, as: SpawnStrategy = SpawnAsRequiredChild): Source[Elem] @process = {
     val xmlSource = new CharXmlChunkSource {
-      override protected val source = charSource
+      override protected[this] def openSource = charSource
       override protected val depth = nodeDepth
       override protected def mapFun(chunk: XmlChunk) = chunkFun(chunk)
     }
     Spawner.start(xmlSource, as)
   }
 
-  private trait ByteXmlChunkSource extends Source[Elem] with StateServer {
+  private trait ByteXmlChunkSource extends TransformingSource[Byte,Elem,ByteParseState] {
     protected val depth: Int
-    protected val source: Source[Byte]
     protected val charset: Charset
     protected val closeTimeout = 20 s
     protected def mapFun(chunk: XmlChunk): Option[Elem]
-    protected[this] override type State = ByteParseState
 
-    protected[this] override def init = ByteParseState(charset.newDecoder, XmlChunker(depth))
-    protected[this] override def termination(state: State) = source.close.receiveWithin(closeTimeout)
-
-    override def read = call(nextChunks(_))
-    protected[this] def nextChunks(state: State): (Read[Elem],State) @process = {
-      def decode(bytes: Seq[Byte]) = {
-        def decode_(in: ByteBuffer, soFar: Seq[Char]): Seq[Char] = {
-          val outEstimatedSize: Int = (in.remaining*state.decoder.averageCharsPerByte).round max 2
-          val out = CharBuffer.allocate(outEstimatedSize)
-          state.decoder.decode(in, out, false) match {
-            case CoderResult.UNDERFLOW => 
-              out.flip
-              soFar ++ new CharBufferSeq(out)
-            case CoderResult.OVERFLOW =>
-              out.flip
-              decode_(in, soFar ++ new CharBufferSeq(out))
-            case other => //error
-              out.flip
-              decode_(in, soFar ++ new CharBufferSeq(out))
-          }
-        }
-        val in = ByteBuffer.wrap(bytes.toArray)
-        decode_(in, Nil)
-      }
-
-      val data = readFromUnderlying
-      data match {
-        case Data(bytes) =>
-          val chars = decode(bytes)
-          val newchunker = state.chunker + chars
-          val xmlChunks = newchunker.chunks.map(mapFun _).filter(_.isDefined).map(_.get)
-          val chunker2 = newchunker.consumeAll
-          if (xmlChunks.isEmpty) {
-            nextChunks(state.copy(chunker=chunker2))
-          } else {
-            noop; (Data(xmlChunks), state.copy(chunker=chunker2))
-          }
-        case EndOfData => noop
-          state.decoder.reset
-          (EndOfData, state)
-      }
+    protected[this] override def createAccumulator = ByteParseState(charset.newDecoder, XmlChunker(depth))
+    protected[this] override def process(state: ByteParseState, add: Seq[Byte]) = {
+      val items = bytesToChars(state.decoder, add, false)
+      processChars(state, items)
     }
-    protected[this] def readFromUnderlying = source.read.receive
-    
-    override def close = stopAndWait    
+    protected[this] override def processEnd(state: ByteParseState) = {
+      val items = bytesToChars(state.decoder, Nil, true)
+      processChars(state, items)._1
+    }
+    protected[this] def bytesToChars(decoder: CharsetDecoder, bytes: Seq[Byte], last: Boolean): Seq[Char] = {
+      def decode(in: ByteBuffer, soFar: Seq[Char]): Seq[Char] = {
+        val outEstimatedSize: Int = (in.remaining*decoder.averageCharsPerByte).round max 2
+        val out = CharBuffer.allocate(outEstimatedSize)
+        decoder.decode(in, out, false) match {
+          case CoderResult.UNDERFLOW => 
+            out.flip
+            soFar ++ new CharBufferSeq(out)
+          case CoderResult.OVERFLOW =>
+            out.flip
+            decode(in, soFar ++ new CharBufferSeq(out))
+          case other => //error
+            out.flip
+            decode(in, soFar ++ new CharBufferSeq(out))
+        }
+      }
+      val in = ByteBuffer.wrap(bytes.toArray)
+      decode(in, Nil)
+    }
+    protected[this] def processChars(state: ByteParseState, items: Seq[Char]) = {
+      val newchunker = state.chunker + items
+      val xmlChunks = newchunker.chunks.view.map(mapFun _).filter(_.isDefined).map(_.get)
+      (xmlChunks, state.copy(chunker=newchunker.consumeAll))
+    }
   }
   private case class ByteParseState(decoder: CharsetDecoder, chunker: XmlChunker)
   private class CharBufferSeq(buffer: CharBuffer) extends scala.collection.Seq[Char] {
@@ -110,36 +96,17 @@ object XmlChunkSource {
     }
   }
 
-  private trait CharXmlChunkSource extends Source[Elem] with StateServer {
+  private trait CharXmlChunkSource extends TransformingSource[Char,Elem,XmlChunker] {
     protected val depth: Int
-    protected val source: Source[Char]
     protected val closeTimeout = 20 s
     protected def mapFun(chunk: XmlChunk): Option[Elem]
-    protected[this] override type State = XmlChunker
-    
-    protected[this] override def init = XmlChunker(depth)
-    protected[this] override def termination(state: State) = source.close.receiveWithin(closeTimeout)
 
-    override def read = call(nextChunks(_))
-    protected[this] def nextChunks(chunker: XmlChunker): (Read[Elem],XmlChunker) @process = {
-      val data = readFromUnderlying
-      data match {
-        case Data(items) =>
-          val newchunker = chunker + items
-          val xmlChunks = newchunker.chunks.map(mapFun _).filter(_.isDefined).map(_.get)
-          val chunker2 = newchunker.consumeAll
-          if (xmlChunks.isEmpty) {
-            nextChunks(chunker2)
-          } else {
-            noop; (Data(xmlChunks), chunker2)
-          }
-        case EndOfData =>
-          noop; (EndOfData, chunker)
-      }
+    protected[this] override def createAccumulator = XmlChunker(depth)
+    protected[this] override def process(chunker: XmlChunker, items: Seq[Char]) = {
+      val newchunker = chunker + items
+      val xmlChunks = newchunker.chunks.view.map(mapFun _).filter(_.isDefined).map(_.get)
+      (xmlChunks, newchunker.consumeAll)
     }
-    protected[this] def readFromUnderlying = source.read.receive
-    
-    override def close = stopAndWait
   }
 }
 
