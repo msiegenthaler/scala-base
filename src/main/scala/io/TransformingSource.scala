@@ -84,6 +84,7 @@ trait TransformingSource[A,B,Accumulator] extends Source[B] with StateServer {
             (Some(Data(res)),Some(na))
           }
         case None =>
+          noop
           (None, Some(acc))
       }
     }
