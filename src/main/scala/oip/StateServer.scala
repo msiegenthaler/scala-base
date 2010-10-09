@@ -13,7 +13,7 @@ import log.Log
  * The state can be queried and modified using messages to the process. The messages are
  * emitted using special methods.
  */
-trait StateServer extends Spawnable with Log with Process {
+trait StateServer extends Spawnable with ConcurrentObject with Log with Process {
   protected type State
 
   override def !(msg: Any) = process ! msg
@@ -47,7 +47,7 @@ trait StateServer extends Spawnable with Log with Process {
   protected[this] def async[R](fun: State => R @process): Selector[R] @process = {
     this ! new ModifyStateMessage with MessageWithSimpleReply[R] {
       override def execute(state: State) = {
-        spawnChild(Required) {
+        concurrent {
           val r = fun(state)
           reply(r)
         }
@@ -58,21 +58,20 @@ trait StateServer extends Spawnable with Log with Process {
   protected[this] def asyncCast[R](fun: State => Any @process): Unit @process = {
     this ! new ModifyStateMessage {
       override def execute(state: State) = {
-        spawnChild(Required) {
+        concurrent {
           fun(state)
+          ()
         }
         state
       }
     }
   }
   protected def stop = this ! Terminate
-  protected def stopAndWait: Completion @process = {
-    async { state =>
-      watch(process)
-      stop
-      receive {
-        case ProcessExit(this.process) => ()
-      }
+  protected def stopAndWait: Completion @process = concurrentWithReply {
+    watch(process)
+    stop
+    receive {
+      case ProcessExit(this.process) => ()
     }
   }
 

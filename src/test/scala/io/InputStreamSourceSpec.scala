@@ -16,23 +16,25 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
       it_("should return EndOfData if reading from empty stream") {
         val is = new ByteArrayInputStream(Array[Byte]())
         val source = InputStreamSource(is)
-        val read = source.read.receiveOption(1 s)
+        val read = source.read(1 s)
         read should be(Some(EndOfData))
+        source.close.await
       }
       it_("should return EndOfData if one continues reading from empty stream") {
         val is = new ByteArrayInputStream(Array[Byte]())
         val source = InputStreamSource(is)
-        val read1 = source.read.receiveOption(1 s)
+        val read1 = source.read(1 s)
         read1 should be(Some(EndOfData))
-        val read2 = source.read.receiveOption(1 s)
+        val read2 = source.read(1 s)
         read2 should be(Some(EndOfData))
-        val read3 = source.read.receiveOption(1 s)
+        val read3 = source.read(1 s)
         read3 should be(Some(EndOfData))
+        source.close.await
       }
       it_("should successfully close") {
         val is = new ByteArrayInputStream(Array[Byte]()) with CloseTracked
         val source = InputStreamSource(is)
-        val read = source.read.receiveOption(1 s)
+        val read = source.read(1 s)
         read should be(Some(EndOfData))
 
         is.closed should be(false)
@@ -49,32 +51,34 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
       def mksource_(is: InputStream) = InputStreamSource(is, 512)
       it_("should return all the data at once") {
         val source = mksource
-        val read1 = source.read.receiveOption(1 s)
+        val read1 = source.read(1 s)
         read1 match {
           case Some(Data(data)) =>
             data.toArray should be(buffer)
           case other => fail(""+other)
         }
-        noop
+        source.close.await
       }
       it_("should return EndOfData after everything is read") {
         val source = mksource
-        val read1 = source.read.receiveOption(1 s)
+        val read1 = source.read(1 s)
         read1 match {
           case Some(Data(data)) =>
             data.toArray should be(buffer)
           case other => fail(""+other)
         }
-        val read2 = source.read.receiveOption(1 s)
+        val read2 = source.read(1 s)
         read2 should be(Some(EndOfData))
+        source.close.await
       }
       it_("should return always EndOfData after everything is read") {
         val source = mksource
-        source.read.receiveOption(1 s)
-        val read2 = source.read.receiveOption(1 s)
+        source.read(1 s)
+        val read2 = source.read(1 s)
         read2 should be(Some(EndOfData))
-        val read3 = source.read.receiveOption(1 s)
+        val read3 = source.read(1 s)
         read3 should be(Some(EndOfData))
+        source.close.await
       }
       it_("should successfully close nothing is read") {
         val is = mkis
@@ -87,7 +91,7 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
       it_("should successfully close a read source") {
         val is = mkis
         val source = mksource_(is)
-        val read = source.read.receiveOption(1 s)
+        val read = source.read(1 s)
         is.closed should be(false)
         val cr = source.close.receiveOption(1 s)
         cr should be(Some(()))
@@ -96,13 +100,12 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
       it_("should successfully close a completly read source") {
         val is = mkis
         val source = mksource_(is)
-        source.read.receiveOption(1 s)
-        val r = source.read.receiveOption(1 s)
+        source.read(1 s)
+        val r = source.read(1 s)
         r should be(Some(EndOfData))
         is.closed should be(false)
         val cr = source.close.receiveOption(1 s)
         cr should be(Some(()))
-        println("...asas "+is.closed)
         is.closed should be(true)
       }
     }
@@ -114,32 +117,34 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
       def mksource_(is: InputStream) = InputStreamSource(is, 12)
       it_("should return all the data at once") {
         val source = mksource
-        val read1 = source.read.receiveOption(1 s)
+        val read1 = source.read(1 s)
         read1 match {
           case Some(Data(data)) =>
             data.toArray should be(buffer)
           case other => fail(""+other)
         }
-        noop
+        source.close.await
       }
       it_("should return EndOfData after everything is read") {
         val source = mksource
-        val read1 = source.read.receiveOption(1 s)
+        val read1 = source.read(1 s)
         read1 match {
           case Some(Data(data)) =>
             data.toArray should be(buffer)
           case other => fail(""+other)
         }
-        val read2 = source.read.receiveOption(1 s)
+        val read2 = source.read(1 s)
         read2 should be(Some(EndOfData))
+        source.close.await
       }
       it_("should return always EndOfData after everything is read") {
         val source = mksource
-        source.read.receiveOption(1 s)
-        val read2 = source.read.receiveOption(1 s)
+        source.read(1 s)
+        val read2 = source.read(1 s)
         read2 should be(Some(EndOfData))
-        val read3 = source.read.receiveOption(1 s)
+        val read3 = source.read(1 s)
         read3 should be(Some(EndOfData))
+        source.close.await
       }
       it_("should successfully close nothing is read") {
         val is = mkis
@@ -152,7 +157,7 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
       it_("should successfully close a read source") {
         val is = mkis
         val source = mksource_(is)
-        val read = source.read.receiveOption(1 s)
+        val read = source.read(1 s)
         is.closed should be(false)
         val cr = source.close.receiveOption(1 s)
         cr should be(Some(()))
@@ -161,8 +166,8 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
       it_("should successfully close a completly read source") {
         val is = mkis
         val source = mksource_(is)
-        source.read.receiveOption(1 s)
-        val r = source.read.receiveOption(1 s)
+        source.read(1 s)
+        val r = source.read(1 s)
         r should be(Some(EndOfData))
         is.closed should be(false)
         val cr = source.close.receiveOption(1 s)
@@ -170,7 +175,6 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
         is.closed should be(true)
       }
     }
-
     describe("stream of bigger size than buffer") {
       val buffer = "Hello Mario!".getBytes("UTF-8")
       def mkis = new ByteArrayInputStream(buffer) with CloseTracked
@@ -181,7 +185,7 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
         readAndCheck(source, bytes)
       }
       def readAndCheck(source: Source[Byte], should: Seq[Byte]) = {
-        val read = source.read.receiveOption(1 s)
+        val read = source.read(1 s)
         read match {
           case Some(Data(data)) =>
             data.toArray should be(should.toArray)
@@ -189,18 +193,20 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
         }
       }
       def readShouldEnd(source: Source[Byte]) = {
-        val read = source.read.receiveOption(1 s)
+        val read = source.read(1 s)
         read should be(Some(EndOfData))
       }
       it_("should return the first fragment of data on the first call") {
         val source = mksource
         readAndCheckString(source, "Hello")
+        source.close.await
       }
       it_("should return the 3 fragments of data") {
         val source = mksource
         readAndCheckString(source, "Hello")
         readAndCheckString(source, " Mari")
         readAndCheckString(source, "o!")
+        source.close.await
       }
       it_("should return EndOfData after all three fragments are read") {
         val source = mksource
@@ -208,6 +214,7 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
         readAndCheckString(source, " Mari")
         readAndCheckString(source, "o!")
         readShouldEnd(source)
+        source.close.await
       }
       it_("should successfully close nothing is read") {
         val is = mkis
@@ -257,16 +264,15 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
         override def available = Int.MaxValue
         override def close = ()
       }
-
-      it_("should be possible to read 100Mb") {
+      it_("should be possible to read 100Mb with reader") {
         val is = new RandomInputStream
         val source = InputStreamSource(is, 1024)
         
         def readit(left: Int): Unit @process = {
           if (left > 0) {
-            val read = source.read.receiveWithin(1 s)
+            val read = source.read(1 s)
             read match {
-              case Data(data) =>
+              case Some(Data(data)) =>
                 data.size should be(1024)
                 noop
               case other =>
@@ -277,20 +283,22 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
         }
 
         readit(100000) // 100'000 times 1Kb
+        source.close.await
       }
     }
     describe("medium long") {
       val string = "The foxy fox jumps the bandwagon in order to get on board the train and have a lot of fun, but then he looses its temper and bites the goose who was piloting the locomotive across the big blue sea"
       val bytes = string.getBytes("UTF-8")
       def readAll(source: Source[Byte], soFar: Seq[Byte] = Nil): Seq[Byte] @process = {
-        val read = source.read.receiveWithin(1 s)
+        val read = source.read(1 s)
         read match {
-          case Data(data) =>
+          case Some(Data(data)) =>
             val nd = soFar ++ data
             readAll(source, nd)
-          case EndOfData => 
+          case Some(EndOfData) => 
             noop
             soFar
+          case None => fail("end")
         }
       }
       it_("should read a string of bytes no matter the buffer size") {
@@ -299,6 +307,7 @@ class InputStreamSourceSpec extends ProcessSpec with ShouldMatchers {
           val source = InputStreamSource(is, bufferSize)
           val data = readAll(source)
           data.toArray should be(bytes)
+          source.close.await
         }
       }
     }

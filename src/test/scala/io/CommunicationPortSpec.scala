@@ -139,22 +139,8 @@ class CommunicationPortSpec extends ProcessSpec with ShouldMatchers {
       val port = container.port
       val data = 1 :: 2 :: 3 :: Nil map(_.toByte)
       container.sendAsDevice(data)
-      val r = port.read.receive
+      val r = port.read
       r should be(Data(data))
-      container.close
-    }
-    it_("should be possible to read all the data from the device at once") {
-      val container = TestPortContainer()
-      val port = container.port
-      val d1 = 1 :: 2 :: 3 :: Nil map(_.toByte)
-      val d2 = 10 :: 20 :: 30 :: Nil map(_.toByte)
-      val d3 = 50 :: Nil map(_.toByte)
-      container.sendAsDevice(d1)
-      container.sendAsDevice(d2)
-      container.sendAsDevice(d3)
-      sleep(200 ms)
-      val r = port.read.receive
-      r should be(Data(d1 ::: d2 ::: d3))
       container.close
     }
     it_("should close the port on a close") {
@@ -163,12 +149,6 @@ class CommunicationPortSpec extends ProcessSpec with ShouldMatchers {
       container.sendAsDevice(1 :: 2 :: 3 :: Nil map(_.toByte))
       port.write(4 :: 5 :: 6 :: Nil).await
       port.close.await
-      val rs = port.read.receiveOption(200 ms)
-      rs should be(None)
-      val ws = port.write(1 :: Nil).receiveOption(200 ms)
-      ws should be(None)
-      val cs = port.close.receiveOption(200 ms)
-      cs should be(None)
     }
   }
 }

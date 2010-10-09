@@ -507,8 +507,8 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
   }
 
   def collectAll[A](source: Source[A], soFar: List[Data[A]] = Nil): List[Data[A]] @process = {
-    val read = source.read.receiveWithin(10 s)
-    read match {
+    val read = source.read(5 s)
+    read.get match {
       case data: Data[A] =>
         data.items.nonEmpty should be(true)
         collectAll(source, data :: soFar)
@@ -524,7 +524,8 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
         val (h,t) = left.splitAt(readPerRequest)
         (Data(h), t)
       } else (Data(left), Nil)
-    }
+    }.receive
+    override def read(timeout: Duration) = Some(read)
     override def close = stopAndWait
   }
   object CharsFromStringSource {
@@ -540,7 +541,8 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
         val (h,t) = left.splitAt(readPerRequest)
         (Data(h), t)
       } else (Data(left), Nil)
-    }
+    }.receive
+    override def read(timeout: Duration) = Some(read)
     override def close = stopAndWait
   }
   object BytesFromStringSource {

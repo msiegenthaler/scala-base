@@ -4,6 +4,7 @@ package io
 import process._
 import Messages._
 import oip._
+import time._
 
 
 /** Port for bidirectional communication with another party. */
@@ -51,6 +52,7 @@ object CommunicationPort {
     protected[this] val sink: Sink[Out]
 
     override def read = source.read
+    override def read(timeout: Duration) = source.read(timeout)
 
     override def write(data: Seq[Out]) = sink.write(data)
     override def write(data: Out) = sink.write(data)
