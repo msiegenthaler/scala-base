@@ -8,11 +8,18 @@ class ScalaBaseProject(info: ProjectInfo) extends DefaultProject(info) with Auto
   val sourceArtifact = Artifact.sources(artifactID)
   override def packageToPublishActions = super.packageToPublishActions ++ Seq(packageSrc)
 
+  val inventsoftReleases = "Inventsoft Release Repository" at "http://mavenrepo.inventsoft.ch/repo"
+  val inventsoftSnapshots = "Inventsoft Snapshot Repository" at "http://mavenrepo.inventsoft.ch/snapshot-repo"
+  override def managedStyle = ManagedStyle.Maven
+  val publishTo = Resolver.ssh("Inventsoft Publish", "foxtrot.inventsoft.ch", "/inventsoft/dev/mavenrepo/snapshot-repo")
+  Credentials(Path.userHome / ".ivy2" / ".credentials", log)
+
+
+
   val slf4j = "org.slf4j" % "slf4j-api" % "1.6.1"
+  val jsr166y = "jsr166" % "jsr166y" % "20101024"
   
   val scalatest = "org.scalatest" % "scalatest" % "1.2" % "test"
   val logbackcore = "ch.qos.logback" % "logback-core" % "0.9.24" % "test"
   val logbackclassic = "ch.qos.logback" % "logback-classic" % "0.9.24" % "test"
-
-//  override def fork = forkRun("-agentpath:/Applications/JProfiler/bin/macos/libjprofilerti.jnilib=port=8849,nowait,id=109,config=/Users/ms/.jprofiler6/config.xml" :: Nil)
 }
