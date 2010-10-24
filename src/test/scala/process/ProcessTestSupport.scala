@@ -6,21 +6,9 @@ import matchers._
 import time._
 
 
-object ProcessTestSupport {  
-  def spawnedTest(body: => Unit @process) = {
-    spawnAndBlock {
-      body
-    }
-  }
-  
-  def sleep(time: Duration) = {
-    receiveWithin(time) { case Timeout => () }
-  }
-}
-
 trait ProcessSpec extends Spec {
   protected[this] def it_(name: String)(body: => Unit @process): Unit = it(name) {
-    ProcessTestSupport.spawnedTest(body)
+    spawnAndBlock(body)
   }
   
   import ShouldMatchers._
