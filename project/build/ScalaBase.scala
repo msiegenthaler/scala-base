@@ -11,7 +11,7 @@ class ScalaBaseProject(info: ProjectInfo) extends DefaultProject(info) with Auto
   val inventsoftReleases = "Inventsoft Release Repository" at "http://mavenrepo.inventsoft.ch/repo"
   val inventsoftSnapshots = "Inventsoft Snapshot Repository" at "http://mavenrepo.inventsoft.ch/snapshot-repo"
   override def managedStyle = ManagedStyle.Maven
-  val publishTo = Resolver.ssh("Inventsoft Publish", "foxtrot.inventsoft.ch", "/inventsoft/dev/mavenrepo/snapshot-repo")
+  val publishTo = Resolver.sftp("Inventsoft Publish", "foxtrot.inventsoft.ch", "/inventsoft/dev/mavenrepo/snapshot-repo")
   Credentials(Path.userHome / ".ivy2" / ".credentials", log)
 
 
