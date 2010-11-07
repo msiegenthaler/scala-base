@@ -23,19 +23,23 @@ object XmlChunkSource {
     context.copy(child=nc)
   }}
 
-  def fromBytes(byteSource: => Source[Byte] @process, encoding: Charset, nodeDepth: Int = 1, chunkFun: ChunkFun = returnChunksOnly _, as: SpawnStrategy = SpawnAsRequiredChild): Source[Elem] @process = {
+  def fromBytes(byteSource: => Source[Byte] @process, encoding: Charset, nodeDepth: Int = 1, chunkFun: ChunkFun = returnChunksOnly _, sendRoot: Boolean = false, as: SpawnStrategy = SpawnAsRequiredChild): Source[Elem] @process = {
+    val sr = sendRoot
     val xmlSource = new ByteXmlChunkSource {
       override protected def openSource = byteSource
       override protected val depth = nodeDepth
       override protected val charset = encoding
+      override protected val sendRoot = sr
       override protected def mapFun(chunk: XmlChunk) = chunkFun(chunk)
     }
     Spawner.start(xmlSource, as)
   }
-  def fromChars(charSource: => Source[Char] @process, nodeDepth: Int = 1, chunkFun: ChunkFun = returnChunksOnly _, as: SpawnStrategy = SpawnAsRequiredChild): Source[Elem] @process = {
+  def fromChars(charSource: => Source[Char] @process, nodeDepth: Int = 1, chunkFun: ChunkFun = returnChunksOnly _, sendRoot: Boolean = false, as: SpawnStrategy = SpawnAsRequiredChild): Source[Elem] @process = {
+    val sr = sendRoot
     val xmlSource = new CharXmlChunkSource {
       override protected[this] def openSource = charSource
       override protected val depth = nodeDepth
+      override protected val sendRoot = sr
       override protected def mapFun(chunk: XmlChunk) = chunkFun(chunk)
     }
     Spawner.start(xmlSource, as)
@@ -45,9 +49,10 @@ object XmlChunkSource {
     protected val depth: Int
     protected val charset: Charset
     protected val closeTimeout = 20 s
+    protected val sendRoot: Boolean
     protected def mapFun(chunk: XmlChunk): Option[Elem]
 
-    protected[this] override def createAccumulator = ByteParseState(charset.newDecoder, XmlChunker(depth))
+    protected[this] override def createAccumulator = ByteParseState(charset.newDecoder, XmlChunker(depth), sendRoot)
     protected[this] override def process(state: ByteParseState, add: Seq[Byte]) = {
       val items = bytesToChars(state.decoder, add, false)
       processChars(state, items)
@@ -77,11 +82,16 @@ object XmlChunkSource {
     }
     protected[this] def processChars(state: ByteParseState, items: Seq[Char]) = {
       val newchunker = state.chunker + items
-      val xmlChunks = newchunker.chunks.view.map(mapFun _).filter(_.isDefined).map(_.get)
-      (xmlChunks, state.copy(chunker=newchunker.consumeAll))
+      if (state.rootNeedsToBeSent && newchunker.parents.size==depth) {
+        val xmlChunks = newchunker.parents.last :: Nil ++ newchunker.chunks.view.map(mapFun _).filter(_.isDefined).map(_.get)
+        (xmlChunks, state.copy(chunker=newchunker.consumeAll, rootNeedsToBeSent=false))
+      } else {
+        val xmlChunks = newchunker.chunks.view.map(mapFun _).filter(_.isDefined).map(_.get)
+        (xmlChunks, state.copy(chunker=newchunker.consumeAll))
+      }
     }
   }
-  private case class ByteParseState(decoder: CharsetDecoder, chunker: XmlChunker)
+  private case class ByteParseState(decoder: CharsetDecoder, chunker: XmlChunker, rootNeedsToBeSent: Boolean)
   private class CharBufferSeq(buffer: CharBuffer) extends scala.collection.Seq[Char] {
     override def apply(index: Int) = buffer.charAt(index)
     override def length = buffer.remaining
@@ -96,22 +106,30 @@ object XmlChunkSource {
     }
   }
 
-  private trait CharXmlChunkSource extends TransformingSource[Char,Elem,XmlChunker] {
+  private trait CharXmlChunkSource extends TransformingSource[Char,Elem,CXCSState] {
     protected val depth: Int
+    protected val sendRoot: Boolean
     protected val closeTimeout = 20 s
     protected def mapFun(chunk: XmlChunk): Option[Elem]
 
-    protected[this] override def createAccumulator = XmlChunker(depth)
-    protected[this] override def process(chunker: XmlChunker, items: Seq[Char]) = {
+    protected[this] override def createAccumulator = CXCSState(XmlChunker(depth), sendRoot)
+    protected[this] override def process(state: CXCSState, items: Seq[Char]) = {
+      val chunker = state.chunker
       val newchunker = chunker + items
-      val xmlChunks = newchunker.chunks.view.map(mapFun _).filter(_.isDefined).map(_.get)
-      (xmlChunks, newchunker.consumeAll)
+      if (state.rootNeedsToBeSent && chunker.parents.size==depth) {
+        val xmlChunks = (chunker.parents.last :: Nil) ++ (newchunker.chunks.view.map(mapFun _).filter(_.isDefined).map(_.get))
+        (xmlChunks, CXCSState(newchunker.consumeAll, false))
+      } else {
+        val xmlChunks = newchunker.chunks.view.map(mapFun _).filter(_.isDefined).map(_.get)
+        (xmlChunks, state.copy(chunker=newchunker.consumeAll))
+      }
     }
   }
+  protected[this] case class CXCSState(chunker: XmlChunker, rootNeedsToBeSent: Boolean)
 }
 
 /**
- * Splits XML into chunks on the first level.
+ * Splits XML into chunks on a given level.
  * I.e. <root><ele1>abcdef</ele1><ele2>aa</ele2> will return two chunks
  *  - <ele1>abcedf</ele1>
  *  - <ele2>aa</ele2>
@@ -120,6 +138,14 @@ trait XmlChunker {
   /** Process a chunk of data */
   def push(data: Seq[Char]): XmlChunker
   def +(data: Seq[Char]) = push(data)
+
+  /**
+   * The parent element currently known to the chunker. The first item in the
+   * list is the parent lowest in the hierarchy, the last is the root-element.
+   * Attention: They may or may not be the parents of the chunks, they
+   * represent the CURRENT parent, depending on the state of the parser.
+   */
+  def parents: List[Elem]
 
   /** Chunks that were discovered (earliest discovered is first in list)*/
   def chunks: List[XmlChunk]
@@ -271,6 +297,7 @@ object XmlChunker extends Log {
     }
 
     private case class CDataHandler(context: XmlChunker, onDone: (XmlChunker,Seq[Char]) => XmlChunker, soFar: Seq[Char], kept: Seq[Char] = Nil) extends XmlChunker {
+      override def parents = context.parents
       override def push(data: Seq[Char]) = {
         matchToCDataEnd(kept ++ data) match {
           case MatchResult(true, cdataAdd, rest) =>

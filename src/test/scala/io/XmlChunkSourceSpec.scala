@@ -466,6 +466,20 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
            <body>Art thou not Romeo, and a Montague?</body>
          </message></stream:stream>""")
       }
+      it_("should support getting the root as a first chunk") {
+        val charSource = CharsFromStringSource(XmppExample1.string)
+        val source = XmlChunkSource.fromChars(charSource=charSource, sendRoot=true)
+        val read = collectAll(source)
+        read.length should be(3)
+        val root :: read1 :: read2 :: Nil = read
+        root.items.size should be(1)
+        root.items.head.label should be("stream")
+        read1.items.size should be(1)
+        read1.items.head should be(XmppExample1.msg1)
+        read2.items.size should be(1)
+        read2.items.head should be(XmppExample1.msg2)
+        source.close.receive
+      }
     }
     describe("from bytes") {
       val encoding = Charset.forName("UTF-8")
@@ -502,6 +516,20 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
         read1.items.head.toString should be("""<stream:stream version="1.0" to="example.com" xmlns:stream="http://etherx.jabber.org/streams" xmlns="jabber:client"><message xml:lang="en" to="romeo@example.net" from="juliet@example.com">
            <body>Art thou not Romeo, and a Montague?</body>
          </message></stream:stream>""")
+      }
+      it_("should support getting the root as a first chunk") {
+        val bytesSource = BytesFromStringSource(XmppExample1.string)
+        val source = XmlChunkSource.fromBytes(byteSource=bytesSource, encoding=encoding, sendRoot=true)
+        val read = collectAll(source)
+        read.length should be(3)
+        val root :: read1 :: read2 :: Nil = read
+        root.items.size should be(1)
+        root.items.head.label should be("stream")
+        read1.items.size should be(1)
+        read1.items.head should be(XmppExample1.msg1)
+        read2.items.size should be(1)
+        read2.items.head should be(XmppExample1.msg2)
+        source.close.receive
       }
     }
   }
