@@ -92,3 +92,28 @@ trait TransformingSource[A,B,Accumulator] extends Source[B] with StateServer {
 
   override def close = stopAndWait
 }
+
+
+/** Source that transforms one item read into exactly one item. */
+trait OneToOneTransformingSource[A,B] extends Source[B] {
+  protected[this] val source: Source[A]
+  protected[this] def transform(from: A): B
+  override def read = {
+    val read = source.read
+    read match {
+      case Data(data) =>
+        Data(data.view.map(transform _))
+      case EndOfData => EndOfData
+    }
+  }
+  override def read(timeout: Duration) = {
+    val read = source.read(timeout)
+    read match {
+      case None => None
+      case Some(Data(data)) =>
+        Some(Data(data.view.map(transform _)))
+      case Some(EndOfData) => Some(EndOfData)
+    }
+  }
+  override def close = source.close
+}

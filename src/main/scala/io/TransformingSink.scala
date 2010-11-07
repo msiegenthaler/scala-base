@@ -46,3 +46,21 @@ trait TransformingSink[A,B,Accumulator] extends Sink[A] with StateServer {
 
   override def close = stopAndWait
 }
+
+
+/**
+ * Sink that transforms one item to exactly one element of a different type.
+ */
+trait OneToOneTransformingSink[A,B] extends Sink[A] {
+  protected[this] val sink: Sink[B]
+  protected[this] def transform(from: A): B
+  override def write(items: Seq[A]) = {
+    val its = items.view.map(transform _)
+    sink.write(its)
+  }
+  override def writeCast(items: Seq[A]) = {
+    val its = items.view.map(transform _)
+    sink.writeCast(its)
+  }
+  override def close = sink.close
+}
