@@ -139,7 +139,7 @@ class CommunicationPortSpec extends ProcessSpec with ShouldMatchers {
       val port = container.port
       val data = 1 :: 2 :: 3 :: Nil map(_.toByte)
       container.sendAsDevice(data)
-      val r = port.read
+      val r = port.read()
       r should be(Data(data))
       container.close
     }

@@ -51,8 +51,8 @@ object CommunicationPort {
     protected[this] val source: Source[In]
     protected[this] val sink: Sink[Out]
 
-    override def read = source.read
-    override def read(timeout: Duration) = source.read(timeout)
+    override def read(maxItems: Int) = source.read(maxItems)
+    override def readWithin(timeout: Duration, maxItems: Int) = source.readWithin(timeout, maxItems)
 
     override def write(data: Seq[Out]) = sink.write(data)
     override def write(data: Out) = sink.write(data)

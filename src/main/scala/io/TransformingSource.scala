@@ -1,6 +1,7 @@
 package ch.inventsoft.scalabase
 package io
 
+import scala.collection.immutable.Queue
 import process._
 import Messages._
 import oip._
@@ -12,13 +13,13 @@ import time._
  * data using a supplied function.
  */
 trait TransformingSource[A,B,Accumulator] extends Source[B] with StateServer {
-  protected case class TSState(source: Source[A], accumulator: Option[Accumulator])
+  protected case class TSState(source: Source[A], accumulator: Option[Accumulator], buffer: Queue[B])
   protected override type State = TSState
   
   protected[this] override def init = {
     val rm = ResourceManager[Source[A]](openSource, _.close).receive
     val a = createAccumulator
-    TSState(rm.resource, Some(a))
+    TSState(rm.resource, Some(a), Queue())
   }
 
   protected[this] def openSource: Source[A] @process
@@ -26,16 +27,25 @@ trait TransformingSource[A,B,Accumulator] extends Source[B] with StateServer {
   protected[this] def process(accumulator: Accumulator, add: Seq[A]): (Seq[B],Accumulator) @process
   protected[this] def processEnd(accumulator: Accumulator): Seq[B] @process = Nil
 
-  override def read = call { state => state.accumulator match {
-    case Some(acc) =>
-      val (r,a) = readLoop(state.source, acc)
-      (r, state.copy(accumulator=a))
-    case None =>
-      noop
-      (EndOfData, state)
-  }}.receive
+  override def read(max: Int) = call { state =>
+    if (state.buffer.nonEmpty) (Data(state.buffer), state.copy(buffer=Queue()))
+    else state.accumulator match {
+      case Some(acc) =>
+        val (r,a) = readLoop(state.source, acc)
+        r match {
+          case Data(data) if data.size>max =>
+            val (h,t) = data.splitAt(max)
+            (Data(h), state.copy(accumulator=a, buffer=state.buffer ++ t))
+          case r =>
+            (r, state.copy(accumulator=a))
+        }
+      case None =>
+        noop
+        (EndOfData, state)
+    }
+  }.receive
   protected[this] def readLoop(source: Source[A], acc: Accumulator): (Read[B],Option[Accumulator]) @process = {
-    val read = source.read
+    val read = source.read()
     read match {
       case EndOfData => 
         val data = processEnd(acc)
@@ -52,15 +62,26 @@ trait TransformingSource[A,B,Accumulator] extends Source[B] with StateServer {
     }
   }
 
-  override def read(timeout: Duration) = call { state => state.accumulator match {
-    case Some(acc) =>
-      val t = System.currentTimeMillis() + timeout.amountAs(Milliseconds)
-      val (r,a) = readLoopWithTimeout(state.source, acc, t)
-      (r, state.copy(accumulator=a))
-    case None =>
-      noop
-      (Some(EndOfData), state)
-  }}.receive
+  override def readWithin(timeout: Duration, max: Int) = call { state =>
+    if (state.buffer.nonEmpty) (Some(Data(state.buffer)), state.copy(buffer=Queue()))
+    else state.accumulator match {
+      case Some(acc) =>
+        val t = System.currentTimeMillis() + timeout.amountAs(Milliseconds)
+        val (r,a) = readLoopWithTimeout(state.source, acc, t)
+        r match {
+          case Some(Data(data)) if data.size>max =>
+            val (h,t) = data.splitAt(max)
+            (Some(Data(h)), state.copy(accumulator=a, buffer=state.buffer ++ t))
+          case Some(_) =>
+            (r, state.copy(accumulator=a))            
+          case None => 
+            (r, state.copy(accumulator=a))
+        }
+      case None =>
+        noop
+        (Some(EndOfData), state)
+    }
+  }.receive
   protected[this] def readLoopWithTimeout(source: Source[A], acc: Accumulator, endTime: Long):
       (Option[Read[B]],Option[Accumulator]) @process = {
     val timeLeft = (endTime - System.currentTimeMillis()) ms;
@@ -69,7 +90,7 @@ trait TransformingSource[A,B,Accumulator] extends Source[B] with StateServer {
       // data and exceeds the timeout doing that
       (None, Some(acc))
     } else {
-      val read = source.read(timeLeft)
+      val read = source.readWithin(timeLeft)
       read match {
         case Some(EndOfData) => 
           val data = processEnd(acc)
@@ -98,16 +119,16 @@ trait TransformingSource[A,B,Accumulator] extends Source[B] with StateServer {
 trait OneToOneTransformingSource[A,B] extends Source[B] {
   protected[this] val source: Source[A]
   protected[this] def transform(from: A): B
-  override def read = {
-    val read = source.read
+  override def read(max: Int) = {
+    val read = source.read(max)
     read match {
       case Data(data) =>
         Data(data.view.map(transform _))
       case EndOfData => EndOfData
     }
   }
-  override def read(timeout: Duration) = {
-    val read = source.read(timeout)
+  override def readWithin(timeout: Duration, max: Int) = {
+    val read = source.readWithin(timeout, max)
     read match {
       case None => None
       case Some(Data(data)) =>

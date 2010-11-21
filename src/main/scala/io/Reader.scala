@@ -58,6 +58,13 @@ object Reader {
     protected[this] object ReadNext
     protected[this] case class Buffered(read: Read[A], from: Process) {
       def ack = from ! ReadNext
+      def take(max: Int): (Read[A], Option[Buffered]) @process = read match {
+        case Data(data) if data.size>max =>
+          val (h,t) = data.splitAt(max)
+          (Data(h), Some(Buffered(Data(t), from)))
+        case Data(data) => (read, None)
+        case EndOfData => (EndOfData, None)
+      }
     }
     protected[this] override type State = (Reader[A], Option[Buffered])
     protected[this] override def init = {
@@ -75,32 +82,36 @@ object Reader {
         Some((state._1, Some(b)))
     }
 
-    override def read = call {
+    override def read(maxItems: Int) = call {
       _ match {
         case (src, Some(buffered)) =>
+          val (read, b) = buffered.take(maxItems)
           buffered.ack
-          (buffered.read, (src, None))
-        case state@(_, None) =>
+          (read, (src, b))
+        case state@(src, None) =>
           receive {
             case buffered: Buffered =>
+              val (read, b) = buffered.take(maxItems)
               buffered.ack
-              (buffered.read, state)
+              (read, (src, b))
             case Terminate =>
               (EndOfData, state)
           }
       }
     }.receive
 
-    override def read(timeout: Duration) = call {
+    override def readWithin(timeout: Duration, maxItems: Int) = call {
       _ match {
         case (src, Some(buffered)) =>
+          val (read, b) = buffered.take(maxItems)
           buffered.ack
-          (Some(buffered.read), (src, None))
-        case state@(_, None) =>
+          (Some(read), (src, b))
+        case state@(src, None) =>
           receiveWithin(timeout) {
             case buffered: Buffered =>
+              val (read, b) = buffered.take(maxItems)
               buffered.ack
-              (Some(buffered.read), state)
+              (Some(read), (src, b))
             case Terminate =>
               (None, state)
             case Timeout =>

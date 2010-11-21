@@ -444,6 +444,56 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
         read2.items.head should be(XmppExample1.msg2)
         source.close.receive
       }
+      it_("should support maxItems reads (1)") {
+        val charSource = CharsFromStringSource(XmppExample1.string, 1000)
+        val source = XmlChunkSource.fromChars(charSource)
+        val read = source.read(1)
+        read match {
+          case Data(data) =>
+            data.size should be(1)
+            data.head should be(XmppExample1.msg1)
+          case other => fail
+        }
+        source.close.receive
+      }
+      it_("should support maxItems reads (2)") {
+        val charSource = CharsFromStringSource(XmppExample1.string, 1000)
+        val source = XmlChunkSource.fromChars(charSource)
+        val read = source.read(2)
+        read match {
+          case Data(data) =>
+            data.size should be(2)
+            data.head should be(XmppExample1.msg1)
+            data.drop(1).head should be(XmppExample1.msg2)
+          case other => fail
+        }
+        source.close.receive
+      }
+      it_("should support maxItems reads (1) with timeout") {
+        val charSource = CharsFromStringSource(XmppExample1.string, 1000)
+        val source = XmlChunkSource.fromChars(charSource)
+        val read = source.readWithin(1 s, 1)
+        read match {
+          case Some(Data(data)) =>
+            data.size should be(1)
+            data.head should be(XmppExample1.msg1)
+          case other => fail
+        }
+        source.close.receive
+      }
+      it_("should support maxItems reads (2) with timeout") {
+        val charSource = CharsFromStringSource(XmppExample1.string, 1000)
+        val source = XmlChunkSource.fromChars(charSource)
+        val read = source.readWithin(1 s, 2)
+        read match {
+          case Some(Data(data)) =>
+            data.size should be(2)
+            data.head should be(XmppExample1.msg1)
+            data.drop(1).head should be(XmppExample1.msg2)
+          case other => fail
+        }
+        source.close.receive
+      }
       it_("should parse the xmpp example1 no matter which readPerRequest value is used") {
         val toRead = XmppExample1.string
         (1 to (toRead.size*2)).foreach_cps { readPerRequest =>
@@ -495,6 +545,56 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
         read2.items.head should be(XmppExample1.msg2)
         source.close.receive
       }
+      it_("should support maxItems reads (1)") {
+        val bytesSource = BytesFromStringSource(XmppExample1.string, 1000)
+        val source = XmlChunkSource.fromBytes(bytesSource, encoding)
+        val read = source.read(1)
+        read match {
+          case Data(data) =>
+            data.size should be(1)
+            data.head should be(XmppExample1.msg1)
+          case other => fail
+        }
+        source.close.receive
+      }
+      it_("should support maxItems reads (2)") {
+        val bytesSource = BytesFromStringSource(XmppExample1.string, 1000)
+        val source = XmlChunkSource.fromBytes(bytesSource, encoding)
+        val read = source.read(2)
+        read match {
+          case Data(data) =>
+            data.size should be(2)
+            data.head should be(XmppExample1.msg1)
+            data.drop(1).head should be(XmppExample1.msg2)
+          case other => fail
+        }
+        source.close.receive
+      }
+      it_("should support maxItems reads (1) with timeout") {
+        val bytesSource = BytesFromStringSource(XmppExample1.string, 1000)
+        val source = XmlChunkSource.fromBytes(bytesSource, encoding)
+        val read = source.readWithin(1 s, 1)
+        read match {
+          case Some(Data(data)) =>
+            data.size should be(1)
+            data.head should be(XmppExample1.msg1)
+          case other => fail
+        }
+        source.close.receive
+      }
+      it_("should support maxItems reads (2) with timeout") {
+        val bytesSource = BytesFromStringSource(XmppExample1.string, 1000)
+        val source = XmlChunkSource.fromBytes(bytesSource, encoding)
+        val read = source.readWithin(1 s, 2)
+        read match {
+          case Some(Data(data)) =>
+            data.size should be(2)
+            data.head should be(XmppExample1.msg1)
+            data.drop(1).head should be(XmppExample1.msg2)
+          case other => fail
+        }
+        source.close.receive
+      }
       it_("should parse the xmpp example1 no matter which readPerRequest value is used") {
         val toRead = XmppExample1.string
         (1 to (toRead.size*2)).foreach_cps { readPerRequest =>
@@ -535,7 +635,7 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
   }
 
   def collectAll[A](source: Source[A], soFar: List[Data[A]] = Nil): List[Data[A]] @process = {
-    val read = source.read(5 s)
+    val read = source.readWithin(5 s)
     read.get match {
       case data: Data[A] =>
         data.items.nonEmpty should be(true)
@@ -546,14 +646,14 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
   class CharsFromStringSource(data: String, readPerRequest: Int = 10) extends Source[Char] with StateServer {
     override type State = Seq[Char]
     override def init = new scala.collection.immutable.WrappedString(data)
-    override def read = call { left =>
+    override def read(max: Int) = call { left =>
       if (left.isEmpty) (EndOfData, left)
       else if (left.length > readPerRequest) {
         val (h,t) = left.splitAt(readPerRequest)
         (Data(h), t)
       } else (Data(left), Nil)
     }.receive
-    override def read(timeout: Duration) = Some(read)
+    override def readWithin(timeout: Duration, max: Int) = Some(read())
     override def close = stopAndWait
   }
   object CharsFromStringSource {
@@ -563,14 +663,14 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
   class BytesFromStringSource(string: String, readPerRequest: Int = 10) extends Source[Byte] with StateServer {
     override type State = Seq[Byte]
     override def init = new scala.collection.mutable.WrappedArray.ofByte(string.getBytes("UTF-8"))
-    override def read = call { left =>
+    override def read(max: Int) = call { left =>
       if (left.isEmpty) (EndOfData, left)
       else if (left.length > readPerRequest) {
         val (h,t) = left.splitAt(readPerRequest)
         (Data(h), t)
       } else (Data(left), Nil)
     }.receive
-    override def read(timeout: Duration) = Some(read)
+    override def readWithin(timeout: Duration, max: Int) = Some(read())
     override def close = stopAndWait
   }
   object BytesFromStringSource {
