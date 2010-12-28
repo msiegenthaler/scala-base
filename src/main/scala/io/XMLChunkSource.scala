@@ -226,6 +226,9 @@ object XmlChunker extends Log {
             } else if (tag.takeRight(2).head == '/') {
               //Inline close
               handleElementOpenInlineClose(tag, chunk).push(tail)
+            } else if (tag.drop(1).head == '?') {
+              //processing instruction -> ignore
+              LookingForElement(parents, chunks, Nil, depth).push(tail)
             } else {
               //Opening tag
               handleElementOpen(tag, chunk).push(tail)

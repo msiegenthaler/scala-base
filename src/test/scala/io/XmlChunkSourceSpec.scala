@@ -397,6 +397,66 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
         e.context should be(Some(<root/>))
       }
     }
+    it("should ignore a simple xml-declaration") {
+      val c = XmlChunker() + """<?xml version="1.0"?>"""
+      c.hasChunks should be(false)
+      c.parents should be(Nil)
+    }
+    it("should ignore an xml-declaration with encoding") {
+      val c = XmlChunker() + """<?xml version="1.0" encoding="UTF-8"?>"""
+      c.hasChunks should be(false)
+      c.parents should be(Nil)
+    }
+    it("should ignore a simple xml-declaration and still parse body") {
+      val c = XmlChunker() + """<?xml version="1.0"?><body>"""
+      c.hasChunks should be(false)
+      c.parents should be(<body/> :: Nil)
+    }
+    it("should ignore a simple xml-declaration and still parse body spaces") {
+      val c = XmlChunker() + """<?xml version="1.0" ?><body>"""
+      c.hasChunks should be(false)
+      c.parents should be(<body/> :: Nil)
+    }
+    it("should parse content after a simple xml-declaration") {
+      val text = """<?xml version="1.0"?><body><a/></body>"""
+      (1 to 100).foreach { i =>
+        val (_, chunks) = feedAndConsume(XmlChunker(), text, i)
+        chunks.size should be(1)
+        chunks(0).string should be("<a/>")
+        chunks(0).xml should be(Some(<a/>))
+        chunks(0).context should be(Some(<body/>))
+      }
+    }
+    it("should parse content after an xml-declaration with encoding") {
+      val text = """<?xml version="1.0" encoding="UTF-8"?><body><a/></body>"""
+      (1 to 100).foreach { i =>
+        val (_, chunks) = feedAndConsume(XmlChunker(), text, i)
+        chunks.size should be(1)
+        chunks(0).string should be("<a/>")
+        chunks(0).xml should be(Some(<a/>))
+        chunks(0).context should be(Some(<body/>))
+      }
+    }
+    it("should parse content after an xml-declaration with encoding and '") {
+      val text = """<?xml version='1.0' encoding='UTF-8'?><body><a/></body>"""
+      (1 to 100).foreach { i =>
+        val (_, chunks) = feedAndConsume(XmlChunker(), text, i)
+        chunks.size should be(1)
+        chunks(0).string should be("<a/>")
+        chunks(0).xml should be(Some(<a/>))
+        chunks(0).context should be(Some(<body/>))
+      }
+    }
+    it("should parse content after an xml-declaration with encoding and standalone=yes") {
+      val text = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><body><a/></body>"""
+      (1 to 100).foreach { i =>
+        val (_, chunks) = feedAndConsume(XmlChunker(), text, i)
+        chunks.size should be(1)
+        chunks(0).string should be("<a/>")
+        chunks(0).xml should be(Some(<a/>))
+        chunks(0).context should be(Some(<body/>))
+      }
+    }
 
     it("should support xmpp (example1)") {
       val string = XmppExample1.string
