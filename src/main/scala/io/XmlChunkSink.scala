@@ -139,6 +139,6 @@ trait XmlChunkSink[Target] extends TransformingSink[Elem,Target,Seq[Char]] {
     }
   }
   protected[this] def serialize(elem: Elem): Seq[Char] = {
-    Utility.toXML(x=elem, minimizeTags=true).toString
+    XmlUtility.mkString(elem)
   }
 }
