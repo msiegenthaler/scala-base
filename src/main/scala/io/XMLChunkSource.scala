@@ -8,6 +8,7 @@ import log._
 import process._
 import oip._
 import time._
+import scala.collection.immutable.Set
 
 
 /**
@@ -159,19 +160,28 @@ trait XmlChunk {
   def chars: Seq[Char]
   def string = new String(chars.toArray)
   /** this chunk as xml-data (if parsable), including the namespaces from the context */
-  lazy val xml: Option[Elem] = {
-    try {
-      val content = chars.toArray
-      val nsdecls = context.map(_.scope).map(" "+_.buildString(null)).getOrElse("")
-      val str = new StringBuilder(nsdecls.length+content.length+8).append("<a").append(nsdecls).append(">").appendAll(content).append("</a>")
-      val reader = new java.io.StringReader(str.toString)
-      val elem = XML.load(reader)
-      elem.child.filter(_.isInstanceOf[Elem]).headOption.asInstanceOf[Option[Elem]]
-    } catch {
-      case e: Exception => None
-    }
+  lazy val xml: Option[Elem] = xmlNoContext.map { elem =>
+    val elemScope = elem.scope
+    val contextScope = context.map(_.scope).getOrElse(TopScope)
+    elem.copy(scope=mergeNamespaces(elemScope, contextScope))
   }
-  def xmlNoContext: Option[Elem] = {
+  private[this] def mergeNamespaces(child: NamespaceBinding, parent: NamespaceBinding) = {
+    def collectPrefixes(b: NamespaceBinding, soFar: Set[String] = Set()): Set[String] = {
+      val s = soFar + b.prefix
+      if (b.parent == null) s
+      else collectPrefixes(b.parent, s)
+    }
+    val onlyParent = collectPrefixes(parent) -- collectPrefixes(child)
+    val nb = onlyParent.foldLeft(child) { (nb,prefix) =>
+      val uri = parent.getURI(prefix)
+      NamespaceBinding(prefix, uri, nb)
+    }
+    lazy val pd = parent.getURI(null)
+    if (child.getURI(null)==null && pd != null) NamespaceBinding(null, pd, nb)
+    else nb
+  }
+
+  lazy val xmlNoContext: Option[Elem] = {
     try {
       val reader = new java.io.StringReader(string)
       val elem = XML.load(reader)

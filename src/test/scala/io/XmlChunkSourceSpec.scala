@@ -174,7 +174,22 @@ class XmlChunkSourceSpec extends ProcessSpec with ShouldMatchers {
       chunk2.string should be("<a:b/>")
       chunk2.xml.get.namespace should be("urn:test")
     }
-
+    it("should override namespaces from parent") {
+      val c = XmlChunker() + "<stream:stream xmlns='jabber:component:accept' xmlns:stream='http://etherx.jabber.org/streams' to='plays.shakespeare.lit'><iq to='hallo' from='mario' xmlns='jabber:iq'/>"
+      c.hasChunks should be(true)
+      c.chunks.size should be(1)
+      val chunk1 :: Nil = c.chunks
+      chunk1.string should be("<iq to='hallo' from='mario' xmlns='jabber:iq'/>")
+      chunk1.xml.get.toString should be("""<iq from="mario" to="hallo" xmlns:stream="http://etherx.jabber.org/streams" xmlns="jabber:iq"></iq>""")
+    }
+    it("should override namespaces from parent in subelements") {
+      val c = XmlChunker() + "<stream:stream xmlns='jabber:component:accept' xmlns:stream='http://etherx.jabber.org/streams' to='plays.shakespeare.lit'><iq to='hallo' from='mario' id='1'><query xmlns='http://jabber.org/protocol/disco#info'/></iq>"
+      c.hasChunks should be(true)
+      c.chunks.size should be(1)
+      val chunk1 :: Nil = c.chunks
+      chunk1.string should be("<iq to='hallo' from='mario' id='1'><query xmlns='http://jabber.org/protocol/disco#info'/></iq>")
+      chunk1.xml.get.toString should be("""<iq id="1" from="mario" to="hallo" xmlns="jabber:component:accept" xmlns:stream="http://etherx.jabber.org/streams"><query xmlns="http://jabber.org/protocol/disco#info"></query></iq>""")
+    }
     it("should also work with a depth of two (simple)") {
       val c = XmlChunker(2) + """<root><group id="a"><value>asdad</value><value/></group><group id="b"><name>Mario</name><age>29</age></group></root>"""
       c.hasChunks should be(true)
