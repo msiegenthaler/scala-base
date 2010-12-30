@@ -62,6 +62,25 @@ class CpsUtilsSpec extends ProcessSpec with ShouldMatchers {
 	  x should be("Mario")
 	}
       }
+      describe("getOrElse") {
+        it_("should return the value on Some") {
+          self ! "Mario"
+          val x = Some("hi").getOrElse_cps(receive { case a: String => a })
+          x should be("hi")
+        }
+        it_("should not execute on Some") {
+          Some("hi").getOrElse_cps(self ! "hi")
+          receiveWithin(1 s) {
+            case Timeout => //ok
+            case other => fail(other.toString)
+          }
+        }
+        it_("should return the default on None") {
+          self ! "Mario"
+          val x = None.getOrElse_cps(receive { case a: String => a })
+          x should be("Mario")
+        }
+      }
     }
     describe("Traversable") {
       describe("foreach") {

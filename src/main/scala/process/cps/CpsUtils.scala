@@ -73,6 +73,7 @@ object CpsUtils {
     def flatMap_cps[B,X](fun: A => Option[B] @cps[X]): Option[B] @cps[X]
     def map_cps[B,X](fun: A => B @cps[X]): Option[B] @cps[X]
     def foreach_cps[U,X](fun: A => U @cps[X]): Unit @cps[X]
+    def getOrElse_cps[U>:A,X](default: => U @cps[X]): U @cps[X]
   }
   class CpsSome[+A](value: A) extends CpsOption[A] {
     override def flatMap_cps[B,X](fun: A => Option[B] @cps[X]) = fun(value)
@@ -81,11 +82,13 @@ object CpsUtils {
       fun(value)
       ()
     }
+    def getOrElse_cps[U>:A,X](default: => U @cps[X]) = value
   }
   object CpsNone extends CpsOption[Nothing] {
     override def flatMap_cps[B,X](fun: Nothing => Option[B] @cps[X]) = None
     override def map_cps[B,X](fun: Nothing => B @cps[X]) = None
     override def foreach_cps[U,X](fun: Nothing => U @cps[X]) = ()
+    override def getOrElse_cps[U>:Nothing,X](default: => U @cps[X]) = default
   }
 
   
