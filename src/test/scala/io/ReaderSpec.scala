@@ -229,9 +229,9 @@ class ReaderSpec extends ProcessSpec with ShouldMatchers {
   case class Elem[A](value: Seq[A], delay: Option[Duration] = None)
   class TestReader[A](data: List[Elem[A]]) extends Reader[A] with StateServer {
     type State = List[Elem[A]]
-    protected[this] override def init = data
+    protected override def init = data
     override def read(sourceFun: Read[A] => ReadResult @process) = cast(doRead(sourceFun, _))
-    protected[this] def doRead(sourceFun: Read[A] => ReadResult @process, data: List[Elem[A]]):
+    protected def doRead(sourceFun: Read[A] => ReadResult @process, data: List[Elem[A]]):
         List[Elem[A]] @process = {
       val (read, rest) = data match {
         case Elem(d, delay) :: rest => 

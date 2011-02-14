@@ -83,7 +83,7 @@ object Messages {
   }
   
   trait SenderAwareMessage {
-    protected[this] val sender: Process = {
+    protected val sender: Process = {
       useWithCare.currentProcess match {
         case Some(process) => process
         case None => throw new IllegalStateException("Not inside a process, cannot set sender")
@@ -95,7 +95,7 @@ object Messages {
     def isReplyTo(request: SenderAwareMessage) = this.request eq request
   }
   trait MessageWithSelectableReply[R] {
-    protected[this] val sender: Process
+    protected val sender: Process
     def sendAndSelect(to: Process): Selector[R] @process
   }
   

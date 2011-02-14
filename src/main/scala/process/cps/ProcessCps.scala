@@ -110,7 +110,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
    * ProcessAction with exception and flow handling
    */
   private trait BodyProcessAction[T] extends ProcessAction[T] {
-    protected[this] def body(state: ProcessState, continue: ContinueProcess[T])
+    protected def body(state: ProcessState, continue: ContinueProcess[T])
     private[ProcessCps] final def run(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler) = {
       try {
         val state2 = flow.step(state)
@@ -129,7 +129,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
    * Support for execution nested CPS'es
    */
   private trait NestingSupport[T] {
-    protected[this] def execNested(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler)(result: => T @process): Unit = {
+    protected def execNested(state: ProcessState, continue: ContinueProcess[T], flow: ProcessFlowHandler)(result: => T @process): Unit = {
       val action: ProcessAction[Any] = reset {
         try {
           val r = result
@@ -236,7 +236,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
             super.execute(state, msg)
           }
         }
-        protected[this] def handleTimeout: Unit = {
+        protected def handleTimeout: Unit = {
           messageBox.cancelCapture { _ match {
             case capture: CaptureRegistrantCreated if capture.registrant == CaptureRegistrantWithin.this =>
               capture(Timeout)
@@ -276,7 +276,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
       register(state)
     }
 
-    protected[this] def createCapture(state: ProcessState): Capture = new PartialFunction[Any,Unit] with CaptureRegistrantCreated {
+    protected def createCapture(state: ProcessState): Capture = new PartialFunction[Any,Unit] with CaptureRegistrantCreated {
       override val registrant = CaptureRegistrant.this
       override def isDefinedAt(msg: Any) = matcher(msg) || msg==ManagementMessage
       override def apply(msg: Any) = {
@@ -287,7 +287,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
     protected def execute(state: ProcessState, msg: Any): Unit = {
       fun(state, msg)
     }
-    protected[this] def processMgmt(state: ProcessState) = {
+    protected def processMgmt(state: ProcessState) = {
       try {
         val state2 = flow.step(state)
         try {

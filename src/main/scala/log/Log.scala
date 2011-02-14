@@ -6,9 +6,9 @@ package log
  * Adds a logger to the implementing class. 
  */
 trait Log {
-  protected[this] val log = {
+  protected val log = {
     val thelog = org.slf4j.LoggerFactory.getLogger(this.getClass)
-    new Slf4jLogger { protected[this] override val log = thelog }
+    new Slf4jLogger { protected override val log = thelog }
   }
 }
 
@@ -50,41 +50,41 @@ trait LoggerLevel {
 
 
 protected trait Slf4jLogger extends Logger {
-  protected[this] val log: org.slf4j.Logger
+  protected val log: org.slf4j.Logger
   val error = {
     new ArrayLoggerLevel with ProcessAwareLoggerLevel {
       override def enabled = log.isErrorEnabled
-      protected[this] override def applyArray(msg: String, ps: Array[Object]) = around { log.error(msg, ps) }
+      protected override def applyArray(msg: String, ps: Array[Object]) = around { log.error(msg, ps) }
     }
   }
   val warn = {
     new ArrayLoggerLevel with ProcessAwareLoggerLevel {
       override def enabled = log.isWarnEnabled
-      protected[this] override def applyArray(msg: String, ps: Array[Object]) = around { log.warn(msg, ps) }
+      protected override def applyArray(msg: String, ps: Array[Object]) = around { log.warn(msg, ps) }
     }
   }
   val info = {
     new ArrayLoggerLevel with ProcessAwareLoggerLevel {
       override def enabled = log.isInfoEnabled
-      protected[this] override def applyArray(msg: String, ps: Array[Object]) = around { log.info(msg, ps) }
+      protected override def applyArray(msg: String, ps: Array[Object]) = around { log.info(msg, ps) }
     }
   }
   val debug = {
     new ArrayLoggerLevel with ProcessAwareLoggerLevel {
       override def enabled = log.isDebugEnabled
-      protected[this] override def applyArray(msg: String, ps: Array[Object]) = around { log.debug(msg, ps) }
+      protected override def applyArray(msg: String, ps: Array[Object]) = around { log.debug(msg, ps) }
     }
   }
   val trace = {
     new ArrayLoggerLevel with ProcessAwareLoggerLevel {
       override def enabled = log.isTraceEnabled
-      protected[this] override def applyArray(msg: String, ps: Array[Object]) = around { log.trace(msg, ps) }
+      protected override def applyArray(msg: String, ps: Array[Object]) = around { log.trace(msg, ps) }
     }
   }
 }
 
 protected trait ProcessAwareLoggerLevel {
-  protected[this] def around(what: => Any): Any = {
+  protected def around(what: => Any): Any = {
     val proc = ch.inventsoft.scalabase.process.useWithCare.currentProcess
     if (proc.isDefined) {
       MDC.put("process", proc.get.toString)
@@ -114,8 +114,8 @@ trait ArrayLoggerLevel extends LoggerLevel {
   override def apply(msg: String, p1: => Any, p2: => Any, p3: => Any, p4: => Any, p5: => Any) = if (enabled) {
     applyArray(msg, Array(p1.asInstanceOf[AnyRef], p2.asInstanceOf[AnyRef], p3.asInstanceOf[AnyRef], p4.asInstanceOf[AnyRef], p5.asInstanceOf[AnyRef]))
   }
-  protected[this] def around(what: => Any): Any
-  protected[this] def applyArray(msg: String, ps: Array[Object]): Unit 
+  protected def around(what: => Any): Any
+  protected def applyArray(msg: String, ps: Array[Object]): Unit 
 }
 
 object IgnoreLoggerLevel extends LoggerLevel {

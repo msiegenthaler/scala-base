@@ -90,7 +90,7 @@ object SpecifiedProcessManager {
 
     override def stop(nice: Boolean) = StopManager(nice) sendAndSelect process
     
-    protected[this] def doStop(nice: Boolean)(whenDone: => Unit @process) = {
+    protected def doStop(nice: Boolean)(whenDone: => Unit @process) = {
       val niceTimeout = if (nice) specification.shutdownTimeout else None 
       niceTimeout match {
         case Some(timeout) =>
@@ -108,6 +108,6 @@ object SpecifiedProcessManager {
           kill
       }
     }
-    protected[this] def kill = throw ForceTermination()
+    protected def kill = throw ForceTermination()
   }
 }

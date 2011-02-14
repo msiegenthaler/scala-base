@@ -14,24 +14,24 @@ trait TransformingSink[A,B,Accumulator] extends Sink[A] with StateServer {
   protected case class TSState(sink: Sink[B], accumulator: Accumulator)
   protected override type State = TSState
 
-  protected[this] override def init = {
+  protected override def init = {
     val rm = ResourceManager[Sink[B]](openSink, _.close).receive
     val a = createAccumulator
     val (data,a2) = process(a, Nil)
     if (data.nonEmpty) rm.resource.write(data).await
     TSState(rm.resource, a2)
   }
-  protected[this] override def termination(state: State) = {
+  protected override def termination(state: State) = {
     val left = processEnd(state.accumulator)
     if (left.nonEmpty) {
       state.sink.write(left).await
     } else noop
   }
   
-  protected[this] def openSink: Sink[B] @process
-  protected[this] def createAccumulator: Accumulator @process
-  protected[this] def process(accumulator: Accumulator, add: Seq[A]): (Seq[B],Accumulator) @process
-  protected[this] def processEnd(accumulator: Accumulator): Seq[B] @process = Nil
+  protected def openSink: Sink[B] @process
+  protected def createAccumulator: Accumulator @process
+  protected def process(accumulator: Accumulator, add: Seq[A]): (Seq[B],Accumulator) @process
+  protected def processEnd(accumulator: Accumulator): Seq[B] @process = Nil
 
   override def write(items: Seq[A]) = call { state => 
     val (w, acc) = process(state.accumulator, items)
@@ -52,8 +52,8 @@ trait TransformingSink[A,B,Accumulator] extends Sink[A] with StateServer {
  * Sink that transforms one item to exactly one element of a different type.
  */
 trait OneToOneTransformingSink[A,B] extends Sink[A] {
-  protected[this] val sink: Sink[B]
-  protected[this] def transform(from: A): B
+  protected val sink: Sink[B]
+  protected def transform(from: A): B
   override def write(items: Seq[A]) = {
     val its = items.view.map(transform _)
     sink.write(its)

@@ -21,12 +21,12 @@ trait StateServer extends Spawnable with ConcurrentObject with Log with Process 
     msg.sendAndSelect(this)
   }
 
-  protected[this] def cast(modificator: State => State @process) = {
+  protected def cast(modificator: State => State @process) = {
     this ! new ModifyStateMessage {
       override def execute(state: State) = modificator(state)
     }
   }
-  protected[this] def call[R](fun: State => (R,State) @process): Selector[R] @process = {
+  protected def call[R](fun: State => (R,State) @process): Selector[R] @process = {
     this ! new ModifyStateMessage with MessageWithSimpleReply[R] {
       override def execute(state: State) = {
         val (v, s) = fun(state)
@@ -35,7 +35,7 @@ trait StateServer extends Spawnable with ConcurrentObject with Log with Process 
       }
     }
   }
-  protected[this] def get[R](getter: State => R @process): Selector[R] @process = {
+  protected def get[R](getter: State => R @process): Selector[R] @process = {
     this ! new ModifyStateMessage with MessageWithSimpleReply[R] {
       override def execute(state: State) = {
         val v = getter(state)
@@ -44,7 +44,7 @@ trait StateServer extends Spawnable with ConcurrentObject with Log with Process 
       }
     }
   }
-  protected[this] def async[R](fun: State => R @process): Selector[R] @process = {
+  protected def async[R](fun: State => R @process): Selector[R] @process = {
     this ! new ModifyStateMessage with MessageWithSimpleReply[R] {
       override def execute(state: State) = {
         concurrent {
@@ -55,7 +55,7 @@ trait StateServer extends Spawnable with ConcurrentObject with Log with Process 
       }
     }
   }
-  protected[this] def asyncCast[R](fun: State => Any @process): Unit @process = {
+  protected def asyncCast[R](fun: State => Any @process): Unit @process = {
     this ! new ModifyStateMessage {
       override def execute(state: State) = {
         concurrent {
@@ -75,9 +75,9 @@ trait StateServer extends Spawnable with ConcurrentObject with Log with Process 
     }
   }
 
-  protected[this] def init: State @process
-  protected[this] override def body = stateRun(init)
-  protected[this] def stateRun(state: State): Unit @process = {
+  protected def init: State @process
+  protected override def body = stateRun(init)
+  protected def stateRun(state: State): Unit @process = {
     val newState = receive(handler(state))
     if (newState.isDefined) stateRun(newState.get)
     else noop
@@ -86,9 +86,9 @@ trait StateServer extends Spawnable with ConcurrentObject with Log with Process 
     case msg: ModifyStateMessage => Some(msg.execute(state))
     case Terminate => termination(state); None
   }
-  protected[this] def termination(state: State) = noop
+  protected def termination(state: State) = noop
 
-  protected[this] trait ModifyStateMessage {
+  protected trait ModifyStateMessage {
     def execute(state: State): State @process
   }
 }

@@ -352,7 +352,7 @@ class BytesParsingSpec  extends Spec with ShouldMatchers {
       }
       it("should allow to define a class/object from a thing") {
         object P extends FragmentClass[(Int,Int,Byte)] {
-          override protected[this] val definition = <<(integer, integer, byte)>>
+          override protected val definition = <<(integer, integer, byte)>>
         }
         P((1,2,3)) should be(0 :: 0 :: 0 :: 1 :: 0 :: 0 :: 0 :: 2 :: 3 :: Nil)
       }
@@ -360,9 +360,9 @@ class BytesParsingSpec  extends Spec with ShouldMatchers {
         case class TestClass(a: Int, b: Int, c: Byte)
 
         object P extends MappedFragmentClass[TestClass,(Int,Int,Byte)] {
-          override protected[this] val rawDefinition = <<(integer, integer, byte)>>
-          override protected[this] def toValue(t: (Int,Int,Byte)) = Some(TestClass(t._1, t._2, t._3))
-          override protected[this] def fromValue(value: TestClass) = (value.a, value.b, value.c)
+          override protected val rawDefinition = <<(integer, integer, byte)>>
+          override protected def toValue(t: (Int,Int,Byte)) = Some(TestClass(t._1, t._2, t._3))
+          override protected def fromValue(value: TestClass) = (value.a, value.b, value.c)
         }
         checkRoundtrip(P)(TestClass(1232123, 12123124, 2), TestClass(0,0,0), TestClass(-3,-4,-5))
       }

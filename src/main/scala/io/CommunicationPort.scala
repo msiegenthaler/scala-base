@@ -47,9 +47,9 @@ object CommunicationPort {
 
   private trait SimpleCommunicationPort[In,Out] extends CommunicationPort[In,Out]
       with ConcurrentObject {
-    protected[this] val process: Process
-    protected[this] val source: Source[In]
-    protected[this] val sink: Sink[Out]
+    protected val process: Process
+    protected val source: Source[In]
+    protected val sink: Sink[Out]
 
     override def read(maxItems: Int) = source.read(maxItems)
     override def readWithin(timeout: Duration, maxItems: Int) = source.readWithin(timeout, maxItems)

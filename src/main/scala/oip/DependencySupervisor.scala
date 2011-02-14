@@ -13,26 +13,26 @@ import ProcessSpecification._
  * 
  * Example:
  *  abstract class TestSupervisor(usbPort: String, answerTo: Process) extends DependencySupervisor {
- *    protected[this] val serial = permanent.shutdownTimeout(2 s) { _ =>
+ *    protected val serial = permanent.shutdownTimeout(2 s) { _ =>
  *      SerialPort(usbPort)(Spawner)
  *    }
- *    protected[this] val lowLevel = permanent.shutdownTimeout(1 s) { _ =>
+ *    protected val lowLevel = permanent.shutdownTimeout(1 s) { _ =>
  *      LowLevelXBee(serial)(Spawner)
  *    }
- *    protected[this] val series1 = permanent.shutdownTimeout(1 s) { _ =>
+ *    protected val series1 = permanent.shutdownTimeout(1 s) { _ =>
  *      Series1XBee(lowLevel)(Spawner)
  *    }
- *    protected[this] val published = transient.shutdownTimeout(1 s) { spawn =>
+ *    protected val published = transient.shutdownTimeout(1 s) { spawn =>
  *      val msg = DependenciesStarted(serial.value, lowLevel.value, series1.value)
  *      spawn(answerTo ! msg)
  *    }
  *  }
  */
 trait DependencySupervisor extends Supervisor with Spawnable with Log {
-  protected[this] def transient[A] = new SpecBuilder1[A](Transient)
-  protected[this] def permanent[A] = new SpecBuilder1[A](Permanent)
-  protected[this] def temporary[A] = new SpecBuilder1[A](Temporary)
-  protected[this] type SpawnFun = (=> Unit @process) => Process @process
+  protected def transient[A] = new SpecBuilder1[A](Transient)
+  protected def permanent[A] = new SpecBuilder1[A](Permanent)
+  protected def temporary[A] = new SpecBuilder1[A](Temporary)
+  protected type SpawnFun = (=> Unit @process) => Process @process
   private[this] type ValueMap = Map[ChildDefinition[_],_]
 
   private[this] var _definitions: List[ChildDefinition[_]] = Nil
@@ -68,7 +68,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
    *     - add value&pm to the state                  [sp]
    * - continue to run phase                          [sp]
    */
-  protected[this] def body = {
+  protected def body = {
     log.trace("Entering initialize phase")
     val initResult = phaseInitialize
     initResult match {
@@ -276,11 +276,11 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
     private[this] val ids = new java.util.concurrent.atomic.AtomicLong()
     def apply() = ids.incrementAndGet 
   }
-  protected[this] class SpecBuilder1[A](restart: RestartSpecification) {
+  protected class SpecBuilder1[A](restart: RestartSpecification) {
     def shutdownTimeout(timeout: Duration) = new SpecBuilder2[A](restart, Some(timeout))
     def hardShutdown = new SpecBuilder2[A](restart, None)
   }
-  protected[this] class SpecBuilder2[A](restart: RestartSpecification, timeout: Option[Duration]) {
+  protected class SpecBuilder2[A](restart: RestartSpecification, timeout: Option[Duration]) {
     def apply(starter: SpawnFun => A @process): ChildDefinition[A] = {
       val wrapper = new ChildDefinition(restart, timeout, starter, ChildIdDealer())
       log.trace("Supervisor: Adding child {}", wrapper.id)
@@ -288,7 +288,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
       wrapper
     }
   }
-  protected[this] class ChildDefinition[A](restart: RestartSpecification, timeout: Option[Duration], starter: SpawnFun => A @process, protected[DependencySupervisor] val id: Long) {
+  protected class ChildDefinition[A](restart: RestartSpecification, timeout: Option[Duration], starter: SpawnFun => A @process, protected[DependencySupervisor] val id: Long) {
     def value: A = DependencyProvider.getDependency(this)
     def getValue = GetValueForDefinition(this).sendAndSelect(process)
     private[DependencySupervisor] def start: (A,SpecifiedProcessManager) @process = {
@@ -315,7 +315,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
     }
     override def toString = "SupervisorChild["+id+"]" 
   }
-  protected[this] implicit def childDefinitionToValue[A](wrapper: ChildDefinition[A]): A = {
+  protected implicit def childDefinitionToValue[A](wrapper: ChildDefinition[A]): A = {
     wrapper.value
   }
   
@@ -416,7 +416,7 @@ trait DependencySupervisor extends Supervisor with Spawnable with Log {
    *    MyThing(dependency1)(Spawner)
    *  }
    */
-  protected[this] object Spawner extends SpawnStrategy {
+  protected object Spawner extends SpawnStrategy {
     override def spawn[A](body: => A @process): Process @process = ProcessSpawnCollector.spawn(body)
   }
 }

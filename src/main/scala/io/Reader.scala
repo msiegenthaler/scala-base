@@ -53,10 +53,10 @@ object Reader {
   }
 
   trait SourceReaderImpl[A] extends Source[A] with StateServer {
-    protected[this] def openReader: Reader[A] @process
+    protected def openReader: Reader[A] @process
 
-    protected[this] object ReadNext
-    protected[this] case class Buffered(read: Read[A], from: Process) {
+    protected object ReadNext
+    protected case class Buffered(read: Read[A], from: Process) {
       def ack = from ! ReadNext
       def take(max: Int): (Read[A], Option[Buffered]) @process = read match {
         case Data(data) if data.size>max =>
@@ -66,17 +66,17 @@ object Reader {
         case EndOfData => (EndOfData, None)
       }
     }
-    protected[this] override type State = (Reader[A], Option[Buffered])
-    protected[this] override def init = {
+    protected override type State = (Reader[A], Option[Buffered])
+    protected override def init = {
       val reader = ResourceManager[Reader[A]](openReader, _.close).receive.resource
       reader.read(doRead _)
       (reader, None)
     }
-    protected[this] override def termination(state: State) = {
+    protected override def termination(state: State) = {
       state._2.foreach_cps(_.ack)
       state._1.close.await
     }
-    protected[this] override def handler(state: State) = super.handler(state).orElse_cps {
+    protected override def handler(state: State) = super.handler(state).orElse_cps {
       case b: Buffered =>
         assert(state._2.isEmpty, "Buffer already full")
         Some((state._1, Some(b)))
@@ -122,7 +122,7 @@ object Reader {
 
     def close = stopAndWait
 
-    protected[this] def doRead(in: Read[A]): ReadResult @process = in match {
+    protected def doRead(in: Read[A]): ReadResult @process = in match {
       case data: Data[A] =>
         process ! Buffered(in, self)
         receive {
@@ -135,7 +135,7 @@ object Reader {
         endReader
         End
     }
-    protected[this] def endReader: Unit @process = {
+    protected def endReader: Unit @process = {
       process ! Buffered(EndOfData, self)
       receive {
         case ReadNext => endReader

@@ -15,7 +15,7 @@ object ThreadPoolExecutorFactory extends ExecutorFactory {
 
 abstract class ThreadPoolExecutor(val label: String, val priority: Priority) extends Executor {
   val threadGroup = new ThreadGroup(label)
-  protected[this] val threadFactory = new ThreadFactory {
+  protected val threadFactory = new ThreadFactory {
     private val counter = new java.util.concurrent.atomic.AtomicInteger(0)
     override def newThread(r: Runnable) = {
       new TPThread(r, threadGroup, label, counter.incrementAndGet, priority)

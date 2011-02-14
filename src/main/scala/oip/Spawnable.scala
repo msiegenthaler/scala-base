@@ -16,9 +16,9 @@ trait Spawnable {
     _process.set(p)
   }
   private val _process = new scala.concurrent.SyncVar[Process]
-  protected[this] lazy val process = _process.get  
+  protected lazy val process = _process.get  
 
-  protected[this] def body: Unit @process
+  protected def body: Unit @process
 }
 
 object Spawner {

@@ -30,18 +30,18 @@ object InputStreamSource {
  */
 trait InputStreamReader extends Reader[Byte] with Spawnable with ConcurrentObject {
   /** The input stream to read from */
-  protected[this] def openInput: InputStream @process
+  protected def openInput: InputStream @process
   /** Max bytes that are read in a single read */
-  protected[this] val bufferSize: Int = 1024
+  protected val bufferSize: Int = 1024
 
-  protected[this] type ReadFun = Read[Byte] => ReadResult @process
+  protected type ReadFun = Read[Byte] => ReadResult @process
 
-  protected[this] override def body = {
+  protected override def body = {
     val input = ResourceManager[InputStream](openInput, _.close).receive.resource
     loop(input)
     input.close //no problem if closed twice
   }
-  protected[this] def loop(input: InputStream): Unit @process = {
+  protected def loop(input: InputStream): Unit @process = {
     receiveNoWait {
       case Terminate => noop //end has priority
       case Timeout => receive {
@@ -52,7 +52,7 @@ trait InputStreamReader extends Reader[Byte] with Spawnable with ConcurrentObjec
       }
     }
   }
-  protected[this] def doRead(fun: ReadFun, input: InputStream): Unit @process = {
+  protected def doRead(fun: ReadFun, input: InputStream): Unit @process = {
     val buffer = new Array[Byte](bufferSize)
     val read = input.read(buffer) match {
       case -1 => EndOfData

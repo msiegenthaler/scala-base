@@ -128,15 +128,15 @@ object BytesParsing {
   }
   
   trait FragmentClass[T] extends Fragment[T] {
-    protected[this] val definition: Fragment[T]
+    protected val definition: Fragment[T]
     override def read(bytes: Seq[Byte]) = definition.read(bytes)
     override def write(value: T) = definition.write(value)
   }
   trait MappedFragmentClass[V,T] extends FragmentClass[V] {
-    protected[this] val rawDefinition: Fragment[T]
-    override protected[this] final lazy val definition: Fragment[V] = rawDefinition.map(fromValue, toValue)
-    protected[this] def toValue(t: T): Option[V]
-    protected[this] def fromValue(value: V): T
+    protected val rawDefinition: Fragment[T]
+    override protected final lazy val definition: Fragment[V] = rawDefinition.map(fromValue, toValue)
+    protected def toValue(t: T): Option[V]
+    protected def fromValue(value: V): T
   }
   
 
@@ -190,9 +190,9 @@ object BytesParsing {
         Some((result, rest))
       }
     }
-    protected[this] def fragments: List[Fragment[Any]]
-    protected[this] def split(value: T): Product
-    protected[this] def assemble(parts: List[Any]): T
+    protected def fragments: List[Fragment[Any]]
+    protected def split(value: T): Product
+    protected def assemble(parts: List[Any]): T
     private def productToList(product: Product): List[Any] = product match {
       case list: List[_] => list
       case product =>
@@ -258,12 +258,12 @@ object BytesParsing {
   }
   type Bits8 = (Boolean,Boolean,Boolean,Boolean,Boolean,Boolean,Boolean,Boolean) 
   class BitByteFragment extends MappedFragmentClass[Bits8,Byte] {
-    override protected[this] val rawDefinition = byte
-    override protected[this] def toValue(b: Byte) = {
+    override protected val rawDefinition = byte
+    override protected def toValue(b: Byte) = {
       Some((getBit(b, 7), getBit(b, 6), getBit(b, 5), getBit(b, 4),
           getBit(b, 3), getBit(b, 2), getBit(b, 1), getBit(b, 0)))
     }
-    override protected[this] def fromValue(value: Bits8) = {
+    override protected def fromValue(value: Bits8) = {
       val v = bit(7, value._1) | bit(6, value._2) | bit(5, value._3) | bit(4, value._4) |
         bit(3, value._5) | bit(2, value._6) | bit(1, value._7) | bit(0, value._8)
       v.toByte
@@ -412,7 +412,7 @@ object BytesParsing {
       underlying.write(value)      
   }
   trait ListFragment[A] extends Fragment[Seq[A]] {
-    protected[this] def element: Fragment[A]
+    protected def element: Fragment[A]
     override def read(bytes: Seq[Byte]) = {
       def readNext(bytes: Seq[Byte], soFar: List[A]): Option[Tuple2[List[A],Seq[Byte]]] = {
         if (shouldAbort(bytes, soFar)) Some((soFar.reverse, bytes))
@@ -423,18 +423,18 @@ object BytesParsing {
       }
       readNext(bytes, Nil)
     }
-    protected[this] def shouldAbort(bytes: Seq[Byte], soFar: List[A]): Boolean
+    protected def shouldAbort(bytes: Seq[Byte], soFar: List[A]): Boolean
     override def write(values: Seq[A]) = {
       val init: Seq[Byte] = Nil
       values.foldLeft(init)((soFar,e) => soFar ++ element.write(e))
     }
   }
   class ListToEndFragment[A](override val element: Fragment[A]) extends ListFragment[A] {
-    override protected[this] def shouldAbort(bytes: Seq[Byte], soFar: List[A]) =
+    override protected def shouldAbort(bytes: Seq[Byte], soFar: List[A]) =
       bytes.isEmpty
   }
   class ListFixedCountFragment[A](override val element: Fragment[A], val count: Int) extends ListFragment[A] {
-    override protected[this] def shouldAbort(bytes: Seq[Byte], soFar: List[A]) =
+    override protected def shouldAbort(bytes: Seq[Byte], soFar: List[A]) =
       soFar.length >= count
   }
   class ListWithComplexPreampleFragment[Pre,Element](element: Fragment[Element], preample: Fragment[Pre], lengthExtractor: Pre => Int, lengthSetter: (Pre,Int) => Pre) extends Fragment[(Pre,Seq[Element])] {

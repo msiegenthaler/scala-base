@@ -17,7 +17,7 @@ class ForkJoinExecutor(val label: String, override val priority: Priority) exten
       t
     }
   }
-  protected[this] def parallelism = Runtime.getRuntime().availableProcessors()
+  protected def parallelism = Runtime.getRuntime().availableProcessors()
   private[this] val pool = new ForkJoinPool(parallelism, threadFactory, null, true)
   def execute(f: => Unit) = {
     pool.execute(new ForkJoinTask[Unit] {

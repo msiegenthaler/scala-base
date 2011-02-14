@@ -87,13 +87,13 @@ object XmlChunkSink {
 
 
 trait XmlChunkCharSink extends XmlChunkSink[Char] {
-  protected[this] override def convertToTargetType(data: Seq[Char]) = data
+  protected override def convertToTargetType(data: Seq[Char]) = data
 }
 trait XmlChunkByteSink extends XmlChunkSink[Byte] {
   protected val encoding: Charset
-  protected[this] override def head =
+  protected override def head =
     "<?xml version=\"1.0\" encoding=\""+encoding.toString+"\"?>\n"
-  protected[this] override def convertToTargetType(data: Seq[Char]) =
+  protected override def convertToTargetType(data: Seq[Char]) =
     data.mkString.getBytes(encoding)
 }
 trait XmlChunkSink[Target] extends TransformingSink[Elem,Target,Seq[Char]] {
@@ -101,32 +101,32 @@ trait XmlChunkSink[Target] extends TransformingSink[Elem,Target,Seq[Char]] {
   /** must be an (indirect) child of root */
   protected val chunkParent: Elem
 
-  protected[this] def convertToTargetType(data: Seq[Char]): Seq[Target]
+  protected def convertToTargetType(data: Seq[Char]): Seq[Target]
 
-  protected[this] def head: Seq[Char] = ""
-  protected[this] override def createAccumulator = {
+  protected def head: Seq[Char] = ""
+  protected override def createAccumulator = {
     val h: Seq[Char] = head ++ mkBeforeAfterFragment._1
     h
   }
 
-  protected[this] override def process(h: Seq[Char], chunks: Seq[Elem]) = {
+  protected override def process(h: Seq[Char], chunks: Seq[Elem]) = {
     val d = chunks.foldLeft(h)(_ ++ serialize(_))
     val out = convertToTargetType(d)
     (out, Nil)
   }
-  protected[this] override def processEnd(h: Seq[Char]) = {
+  protected override def processEnd(h: Seq[Char]) = {
     val d = h ++ mkBeforeAfterFragment._2
     convertToTargetType(d)
   }
 
-  protected[this] def mkBeforeAfterFragment = {
+  protected def mkBeforeAfterFragment = {
     val xml = addToElement(root, _ == chunkParent, Text("{99xml-chunk-content21}"))
     val parts = xml.toString.split("\\{99xml-chunk-content21\\}")
     if (parts.size < 2) throw new IllegalArgumentException("chunkParent is invalid (not a child of root)")
     else if (parts.size > 2) throw new IllegalArgumentException("unsupported root (contains reserved pattern)")
     (parts(0), parts(1))
   }
-  protected[this] def addToElement(elem: Elem, to: Elem => Boolean, toAdd: Node): Elem = {
+  protected def addToElement(elem: Elem, to: Elem => Boolean, toAdd: Node): Elem = {
     if (to(elem)) {
       val nc = elem.child ++ toAdd
       elem.copy(child=nc)
@@ -138,7 +138,7 @@ trait XmlChunkSink[Target] extends TransformingSink[Elem,Target,Seq[Char]] {
       elem.copy(child=nc)
     }
   }
-  protected[this] def serialize(elem: Elem): Seq[Char] = {
+  protected def serialize(elem: Elem): Seq[Char] = {
     XmlUtility.mkString(elem)
   }
 }

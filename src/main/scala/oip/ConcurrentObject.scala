@@ -19,26 +19,26 @@ import executionqueue._
  * }
  */
 trait ConcurrentObject {
-  protected[this] def concurrentQueue: ExecutionQueue = execute
+  protected def concurrentQueue: ExecutionQueue = execute
   
   /** Doesn't do much except returning a MessageSelector instead of a "simple" value */
-  protected[this] def replyInCallerProcess[A](fun: => A @process): Selector[A] @process = {
+  protected def replyInCallerProcess[A](fun: => A @process): Selector[A] @process = {
     val token = RequestToken.create[A]
     token.reply(fun)
     token.select
   }
 
   /** Executes fun in a new process (spawnChild(Required)) */
-  protected[this] def concurrent(fun: => Unit @process): Unit @process = concurrent(concurrentQueue)(fun)
-  protected[this] def concurrent(queue: ExecutionQueue)(fun: => Unit @process): Unit @process = {
+  protected def concurrent(fun: => Unit @process): Unit @process = concurrent(concurrentQueue)(fun)
+  protected def concurrent(queue: ExecutionQueue)(fun: => Unit @process): Unit @process = {
     spawnChildProcess(queue)(Required) { fun }
     noop
   }
 
   /** Executes fun in a new process (spawnChild(Required)) and returns a selector for the result */
-  protected[this] def concurrentWithReply[A](fun: => A @process): Selector[A] @process =
+  protected def concurrentWithReply[A](fun: => A @process): Selector[A] @process =
     concurrentWithReply(concurrentQueue)(fun)
-  protected[this] def concurrentWithReply[A](queue: ExecutionQueue)(fun: => A @process) = {
+  protected def concurrentWithReply[A](queue: ExecutionQueue)(fun: => A @process) = {
     val token = RequestToken.create[A]
     spawnChildProcess(queue)(Required) {
       val result = fun
@@ -55,9 +55,9 @@ trait ConcurrentObject {
    *   reply(r)
    * }
    */
-  protected[this] def concurrentWithReplyFun[A](fun: (A => Unit @process) => Unit @process): Selector[A] @process =
+  protected def concurrentWithReplyFun[A](fun: (A => Unit @process) => Unit @process): Selector[A] @process =
     concurrentWithReplyFun(concurrentQueue)(fun)
-  protected[this] def concurrentWithReplyFun[A](queue: ExecutionQueue)(fun: (A => Unit @process) => Unit @process) = {
+  protected def concurrentWithReplyFun[A](queue: ExecutionQueue)(fun: (A => Unit @process) => Unit @process) = {
     val token = RequestToken.create[A]
     spawnChildProcess(queue)(Required) {
       val result = fun(token.reply _)

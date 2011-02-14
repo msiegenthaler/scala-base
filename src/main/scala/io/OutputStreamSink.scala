@@ -25,14 +25,14 @@ object OutputStreamSink {
  */
 trait OutputStreamSink extends Sink[Byte] with StateServer {
   /** The output stream to write to */
-  protected[this] val _output: OutputStream
-  protected[this] val maxWrittenAtATime = 64*1024 // 64k
+  protected val _output: OutputStream
+  protected val maxWrittenAtATime = 64*1024 // 64k
 
-  protected[this] override type State = OutputStream
-  protected[this] override def init = {
+  protected override type State = OutputStream
+  protected override def init = {
     ResourceManager[OutputStream](_output, _.close).receive.resource
   }
-  protected[this] override def termination(output: State) = {
+  protected override def termination(output: State) = {
     output.close
   }
   
@@ -43,7 +43,7 @@ trait OutputStreamSink extends Sink[Byte] with StateServer {
     writeBlocking(output, items)
     output
   }
-  protected[this] def writeBlocking(output: OutputStream, items: Seq[Byte]): Unit = items match {
+  protected def writeBlocking(output: OutputStream, items: Seq[Byte]): Unit = items match {
     case array: WrappedArray[Byte] =>
       output.write(array.array)
     case iterable =>

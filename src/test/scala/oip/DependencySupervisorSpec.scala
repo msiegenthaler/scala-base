@@ -17,7 +17,7 @@ class DependencySupervisorSpec extends ProcessSpec with ShouldMatchers {
     override def stop = super.stop
   }
   class SerialPort(portName: String) extends TestStateServer {
-    protected[this] override def init = 0
+    protected override def init = 0
     def queryPortName = get(state => portName)
   }
   object SerialPort {
@@ -28,7 +28,7 @@ class DependencySupervisorSpec extends ProcessSpec with ShouldMatchers {
     }
   }
   class LowLevelXBee(serialPort: SerialPort) extends TestStateServer {
-    protected[this] override def init = 0
+    protected override def init = 0
     def querySerialPort = get(state => serialPort)
   }
   object LowLevelXBee {
@@ -39,7 +39,7 @@ class DependencySupervisorSpec extends ProcessSpec with ShouldMatchers {
     }
   }
   class Series1XBee(lowLevel: LowLevelXBee) extends TestStateServer {
-    protected[this] override def init = 0
+    protected override def init = 0
     def queryLowLevel = get(state => lowLevel)
   }
   object Series1XBee {
@@ -51,16 +51,16 @@ class DependencySupervisorSpec extends ProcessSpec with ShouldMatchers {
   }
 
   class TestSupervisor private(usbPort: String, answerTo: Process) extends DependencySupervisor {
-    protected[this] val serial = permanent.shutdownTimeout(2 s) { _ =>
+    protected val serial = permanent.shutdownTimeout(2 s) { _ =>
       SerialPort(usbPort)(Spawner)
     }
-    protected[this] val lowLevel = permanent.shutdownTimeout(1 s) { _ =>
+    protected val lowLevel = permanent.shutdownTimeout(1 s) { _ =>
       LowLevelXBee(serial)(Spawner)
     }
-    protected[this] val series1 = permanent.shutdownTimeout(1 s) { _ =>
+    protected val series1 = permanent.shutdownTimeout(1 s) { _ =>
       Series1XBee(lowLevel)(Spawner)
     }
-    protected[this] val published = transient.shutdownTimeout(1 s) { spawn =>
+    protected val published = transient.shutdownTimeout(1 s) { spawn =>
       val msg = DependenciesStarted(serial.value, lowLevel.value, series1.value)
       spawn(answerTo ! msg)
     }
