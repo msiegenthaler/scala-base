@@ -11,15 +11,14 @@ import oip._
  * sink.
  */
 trait TransformingSink[A,B,Accumulator] extends Sink[A] with StateServer {
-  protected case class TSState(sink: Sink[B], accumulator: Accumulator)
-  protected override type State = TSState
+  protected case class State(sink: Sink[B], accumulator: Accumulator)
 
   protected override def init = {
     val rm = ResourceManager[Sink[B]](openSink, _.close).receive
     val a = createAccumulator
     val (data,a2) = process(a, Nil)
     if (data.nonEmpty) rm.resource.write(data).await
-    TSState(rm.resource, a2)
+    State(rm.resource, a2)
   }
   protected override def termination(state: State) = {
     val left = processEnd(state.accumulator)

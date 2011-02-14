@@ -205,8 +205,8 @@ class SpecifiedProcessManagerSpec extends ProcessSpec with ShouldMatchers {
   }
   
   class TestSPMP extends SpecifiedProcessManagerParent with StateServer {
-    type State = List[(SpecifiedProcessManager,Boolean)]
-    override protected def init = Nil
+    protected override type State = List[(SpecifiedProcessManager,Boolean)]
+    protected override def init = Nil
     override def processStopped(manager: SpecifiedProcessManager, requestsRestart: Boolean) = cast { state =>
       (manager,requestsRestart) :: state
     }

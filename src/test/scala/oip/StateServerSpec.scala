@@ -16,15 +16,15 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
       Spawner.start(new PeopleStateServer, as)
   }
   class PeopleStateServer protected() extends StateServer {
-    type State = PeopleState
-    protected override def init = PeopleState(0, Nil)
+    case class State(counter: Int, people: List[String])
+    protected override def init = State(0, Nil)
     
     def addPerson(name: String) = cast { (state) =>
       tick
-      PeopleState(state.counter + 1, name :: state.people)
+      State(state.counter + 1, name :: state.people)
     }
     def addPersonFast(name: String) = cast { (state) =>
-      PeopleState(state.counter + 1, name :: state.people)
+      State(state.counter + 1, name :: state.people)
     }
     def count = call { state =>
       val c = state.counter
@@ -56,7 +56,6 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
 
     private def tick = sleep(50 ms)
   }
-  case class PeopleState(counter: Int, people: List[String])
   
   object ParentServer {
     def apply(as: SpawnStrategy = SpawnAsRequiredChild): ParentServer @process = 
@@ -224,7 +223,7 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
     }
   
     class SendTerminatePeopleStateServer(parent: Process) extends PeopleStateServer {
-      protected override def termination(finalState: PeopleState) = {
+      protected override def termination(finalState: State) = {
         parent ! "Terminated"
       }
     }
@@ -258,7 +257,7 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
         protected override def init = {
           p.set(process)
           sleep(500 ms)
-          PeopleState(0, Nil)
+          State(0, Nil)
         }
       }
       server.start(SpawnAsRequiredChild)
@@ -274,7 +273,7 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
       val server = new PeopleStateServer() {
         protected override def init = {
           sleep(500 ms)
-          PeopleState(0, Nil)
+          State(0, Nil)
         }
       }
       server.start(SpawnAsRequiredChild)
@@ -288,7 +287,7 @@ class StateServerSpec extends ProcessSpec with ShouldMatchers {
           protected override def init = {
             val myProcess = process
             p.set(myProcess)
-            PeopleState(0, Nil)
+            State(0, Nil)
           }
         }
         server.start(SpawnAsRequiredChild)

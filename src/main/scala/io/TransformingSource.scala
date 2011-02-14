@@ -13,13 +13,12 @@ import time._
  * data using a supplied function.
  */
 trait TransformingSource[A,B,Accumulator] extends Source[B] with StateServer {
-  protected case class TSState(source: Source[A], accumulator: Option[Accumulator], buffer: Queue[B])
-  protected override type State = TSState
+  protected case class State(source: Source[A], accumulator: Option[Accumulator], buffer: Queue[B])
   
   protected override def init = {
     val rm = ResourceManager[Source[A]](openSource, _.close).receive
     val a = createAccumulator
-    TSState(rm.resource, Some(a), Queue())
+    State(rm.resource, Some(a), Queue())
   }
 
   protected def openSource: Source[A] @process
