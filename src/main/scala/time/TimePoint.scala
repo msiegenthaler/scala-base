@@ -1,6 +1,9 @@
 package ch.inventsoft.scalabase
 package time
 
+import javax.time._
+import calendar._
+
 
 /**
  * A specific, absolute point in time (i.e. the 10:12:12.123 on 2nd of January 2010 (UTC))
@@ -29,6 +32,15 @@ trait TimePoint extends Ordered[TimePoint] with Equals {
     case other => false
   }
   override def canEqual(o: Any) = o.isInstanceOf[TimePoint]
+
+  def asXmlDateTime = {
+    val t = Instant.millis(unixTime)
+    val dt = OffsetDateTime.fromInstant(t, ZoneOffset.UTC)
+    calendar.format.DateTimeFormatters.isoDateTime().print(dt)
+  }
+  def asInstant = Instant.millis(unixTime)
+  def asDateTime = OffsetDateTime.fromInstant(asInstant, ZoneOffset.UTC)
+  def asDate = asDateTime.toOffsetDate
 
   override def toString = {
     new java.util.Date(unixTime).toString
