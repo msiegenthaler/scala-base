@@ -382,9 +382,15 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
     override def onKill(of: ProcessInternal, finalState: ProcessState, by: ProcessInternal, originalBy: Process, reason: Throwable) = {
       super.onKill(of, finalState, by, originalBy, reason)
       if (by == originalBy) {
-        log.info("{} was killed by {} due to {}: {}", of, by, reason.getClass.getSimpleName, reason.getMessage)
+        if (reason.getMessage != null)
+          log.info("{} was killed by {} due to {}: {}", of, by, reason.getClass.getSimpleName, reason.getMessage)
+        else
+          log.info("{} was killed by {} due to {}", of, by, reason.getClass.getSimpleName)
       } else {
-        log.info("{} was killed by {} because {} crashed with {}: {}", of, by, originalBy, reason.getClass.getSimpleName, reason.getMessage)
+        if (reason.getMessage != null)
+          log.info("{} was killed by {} because {} crashed with {}: {}", of, by, originalBy, reason.getClass.getSimpleName, reason.getMessage)
+        else
+          log.info("{} was killed by {} because {} crashed with {}", of, by, originalBy, reason.getClass.getSimpleName)
       }
     }      
   }
@@ -392,7 +398,10 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
   private trait WarnCrashPL extends ProcessListener {
     override def onException(in: ProcessInternal, finalState: ProcessState, cause: Throwable) = {
       super.onException(in, finalState, cause)
-      log.warn("{} crashed with {}: {}", in, cause.getClass.getSimpleName, cause.getMessage)
+      if (cause.getMessage != null)
+        log.warn("{} crashed with {}: {}", in, cause.getClass.getSimpleName, cause.getMessage, cause)
+      else
+        log.warn("{} crashed with {}", in, cause.getClass.getSimpleName, cause)
     }
   }
   /** Logs expectedly crashing processes */
