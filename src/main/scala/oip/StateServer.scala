@@ -88,7 +88,7 @@ trait StateServer extends Spawnable with ConcurrentObject with Log with Process 
     }
   }
   
-  protected override def spawnChild(queue: ExecutionQueue)(fun: => Unit @process) = {
+  protected override def spawnObjectChild(queue: ExecutionQueue)(fun: => Unit @process) = {
     //Make sure that all processes are executed as a child of the "State-Process" and
     // not as a child of the caller
     this ! new ModifyStateMessage {

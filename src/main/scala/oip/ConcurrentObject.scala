@@ -29,7 +29,7 @@ trait ConcurrentObject {
   /** Executes fun in a new process (spawnChild(Required)) */
   protected def concurrent(fun: => Unit @process): Unit @process = concurrent(concurrentQueue)(fun)
   protected def concurrent(queue: ExecutionQueue)(fun: => Unit @process): Unit @process = {
-    spawnChild(queue) { fun }
+    spawnObjectChild(queue)(fun)
     noop
   }
 
@@ -38,7 +38,7 @@ trait ConcurrentObject {
     concurrentWithReply(concurrentQueue)(fun)
   protected def concurrentWithReply[A](queue: ExecutionQueue)(fun: => A @process) = {
     val token = RequestToken.create[A]
-    spawnChild(queue) {
+    spawnObjectChild(queue) {
       val result = fun
       token.reply(result)
     }
@@ -57,14 +57,14 @@ trait ConcurrentObject {
     concurrentWithReplyFun(concurrentQueue)(fun)
   protected def concurrentWithReplyFun[A](queue: ExecutionQueue)(fun: (A => Unit @process) => Unit @process) = {
     val token = RequestToken.create[A]
-    spawnChild(queue) {
+    spawnObjectChild(queue) {
       val result = fun(token.reply _)
     }
     token.select
   }
   
   protected def concurrentQueue: ExecutionQueue = execute  
-  protected def spawnChild(queue: ExecutionQueue)(fun: => Unit @process) = {
+  protected def spawnObjectChild(queue: ExecutionQueue)(fun: => Unit @process) = {
     spawnChildProcess(queue)(Required)(fun)
     ()
   }
