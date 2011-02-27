@@ -66,6 +66,16 @@ trait StateServer extends Spawnable with ConcurrentObject with Log with Process 
       }
     }
   }
+  protected def atomic(fun: State => State @process) = {
+    val r = this ! new ModifyStateMessage with MessageWithSimpleReply[State] {
+      override def execute(state: State) = {
+        val s = fun(state)
+        reply(s)
+        s
+      }
+    }
+    r.receive
+  }
   protected def stop = this ! Terminate
   protected def stopAndWait: Completion @process = concurrentWithReply {
     watch(process)
