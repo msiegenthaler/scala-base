@@ -55,7 +55,7 @@ trait StateServer extends Spawnable with ConcurrentObject with Log with Process 
       }
     }
   }
-  protected def asyncCast[R](fun: State => Any @process): Unit @process = {
+  protected def concurrent[R](fun: State => Any @process): Unit @process = {
     this ! new ModifyStateMessage {
       override def execute(state: State) = {
         concurrent {
