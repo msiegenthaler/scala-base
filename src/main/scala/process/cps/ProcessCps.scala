@@ -554,7 +554,8 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
         listener = RootProcessListener,
         body = body,
         initialWatched = watched,
-        initialWatchers = watchers)
+        initialWatchers = watchers,
+        parent = None)
     }
     def child(parent: ProcessInternal, childType: ChildType, queue: ExecutionQueue, body: => Any @process, watched: List[ProcessImpl] = Nil, watchers: List[ProcessImpl] = Nil): ProcessInternal = {
       val tm = childType match {
@@ -567,7 +568,8 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
         listener = tm,
         body = body,
         initialWatched = watched,
-        initialWatchers = watchers)
+        initialWatchers = watchers,
+        parent = Some(parent))
     }
 
     def currentProcess: Option[Process] = {
@@ -579,9 +581,10 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
   }
   private final val pidDealer = new java.util.concurrent.atomic.AtomicLong(0)
 
-  private class ProcessImpl(queue_org: ExecutionQueue, listener: ProcessListener) extends Process with ProcessInternal {
-    def this(queue: ExecutionQueue, listener: ProcessListener, body: => Any @process, initialWatchers: List[ProcessInternal], initialWatched: List[ProcessInternal]) = {
-      this(queue, listener)
+  private class ProcessImpl(queue_org: ExecutionQueue, listener: ProcessListener, parent: Option[Process])
+          extends Process with ProcessInternal {
+    def this(queue: ExecutionQueue, listener: ProcessListener, body: => Any @process, initialWatchers: List[ProcessInternal], initialWatched: List[ProcessInternal], parent: Option[Process]) = {
+      this(queue, listener, parent)
       val toExecute: ProcessAction[Any] = reset {
         firstFun.cps
         body
@@ -681,9 +684,12 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
 
     @volatile private[this] var name: Option[String] = None
     def changeName(value: Option[String]) = name = value
-    override def toString = name match {
-      case Some(name) => "<"+name+"-"+pid+">"
-      case None => "<Process-"+pid+">"
+    override def toString = {
+      val n = name match {
+        case Some(name) => "<"+name+"-"+pid+">"
+        case None => "<Process-"+pid+">"
+      }
+      parent.map(n + " # " + _.toString).getOrElse(n)
     }
 
     val external: Process = this //TODO let gc collect us we don't have a 'internal' reference anymore
