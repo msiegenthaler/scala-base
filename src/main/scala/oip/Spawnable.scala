@@ -12,12 +12,16 @@ trait Spawnable {
   private[this] val startMutex: AnyRef = new Object()
   protected[oip] def start(as: SpawnStrategy) = startMutex.synchronized {
     if (_process.isSet) throw new IllegalStateException("already started")
-    val p = as.spawn(body)
+    val p = as.spawn {
+      processName(nameOfProcess)
+      body
+    }
     _process.set(p)
   }
   private val _process = new scala.concurrent.SyncVar[Process]
   protected lazy val process = _process.get  
 
+  protected def nameOfProcess = Some(toString)
   protected def body: Unit @process
 }
 

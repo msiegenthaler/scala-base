@@ -59,6 +59,15 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         val res = sel.receive
         res should be(55)
       }
+      it_("should be possible to set a user defined name") {
+        val p = self
+        val orgName = p.toString
+        val nr = orgName.dropWhile(_ != '-')
+        processName(Some("Test UDN"))
+        p.toString should be("<Test UDN"+nr)
+        processName(None)
+        p.toString should be(orgName)
+      }
     }
     /* /////////////////////////// */
     // Receive

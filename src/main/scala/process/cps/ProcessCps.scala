@@ -27,6 +27,8 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
 
 
   def self = SelfProcessAction.cps
+  def processName(name: Option[String]): Unit @process = new SetProcessNameAction(name).cps
+
   def receive[T](fun: PartialFunction[Any,T @process]) = new ReceiveProcessAction(fun).cps
   def receiveWithin[T](timeout: Duration)(fun: PartialFunction[Any,T @process]) = {
     if (timeout.isZero) new ReceiveNoWaitProcessAction(fun).cps
@@ -190,6 +192,16 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
       val me = state.process 
       val child = ProcessImpl.child(me, kind, executionQueue, body)
       continue(child, state.copy(children = child :: state.children))
+    }
+  }
+
+  /**
+   * ProcessAction changing the name of the process.
+   */
+  private class SetProcessNameAction(name: Option[String]) extends ProcessAction[Unit] {
+    override def run(state: ProcessState, continue: ContinueProcess[Unit], flow: ProcessFlowHandler) = {
+      state.process.changeName(name)
+      continue((), state)
     }
   }
 
@@ -667,7 +679,12 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
     override def !(msg: Any) = messageBox.enqueue(msg)
     def send(msg: Any) = messageBox.enqueue(msg)
 
-    override def toString = "<Process-"+pid+">"
+    @volatile private[this] var name: Option[String] = None
+    def changeName(value: Option[String]) = name = value
+    override def toString = name match {
+      case Some(name) => "<"+name+"-"+pid+">"
+      case None => "<Process-"+pid+">"
+    }
 
     val external: Process = this //TODO let gc collect us we don't have a 'internal' reference anymore
   }

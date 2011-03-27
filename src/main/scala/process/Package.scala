@@ -176,6 +176,13 @@ package object process {
    * @return the the current process (external view)
    */
   def self: Process @process = ProcessCps.self
+
+  /**
+   * Set a user readable name for this process.
+   * This will be used in toString of the process and for logging.
+   * Example: Name = "<Process-12>" changes to "<MyListener-12>" after calling processName("MyListener")
+   */
+  def processName(name: Option[String]): Unit @process = ProcessCps.processName(name)
   
   /**
    * @return a no-op cps
