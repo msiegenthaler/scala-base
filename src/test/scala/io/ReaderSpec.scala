@@ -17,7 +17,7 @@ class ReaderSpec extends ProcessSpec with ShouldMatchers {
         val reader = TestReader(Nil)
         val source = Reader.toSource(reader)
         val r = source.read()
-        r should be(EndOfData)
+        r should be(EndOfData) 
         source.close.await
       }
       it_("should always return EndOfData on an empty reader") {
@@ -251,7 +251,11 @@ class ReaderSpec extends ProcessSpec with ShouldMatchers {
         case End => noop; rest
       }
     }
-    override def close = stopAndWait
+    override def close = {
+      stop
+      replyInCallerProcess(())
+    }
+    override def toString = "TestReader"
   }
   object TestReader {
     def apply(data: List[Elem[Int]]) = {
