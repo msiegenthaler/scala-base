@@ -115,5 +115,7 @@ trait StateServer extends Spawnable with ConcurrentObject with Log with Process 
   protected trait ModifyStateMessage {
     def execute(state: State): State @process
   }
+
+  protected override def nameOfProcess = "StateServer"
 }
 

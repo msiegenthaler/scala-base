@@ -111,6 +111,7 @@ trait TransformingSource[A,B,Accumulator] extends Source[B] with StateServer {
   }
 
   override def close = stopAndWait
+  override def toString = "TransformingSource"
 }
 
 
@@ -136,4 +137,5 @@ trait OneToOneTransformingSource[A,B] extends Source[B] {
     }
   }
   override def close = source.close
+  override def toString = source.toString+"-transformed"
 }

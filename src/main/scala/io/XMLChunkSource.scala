@@ -91,6 +91,7 @@ object XmlChunkSource {
         (xmlChunks, state.copy(chunker=newchunker.consumeAll))
       }
     }
+    override def toString = "ByteXmlChunkSource"
   }
   private case class ByteParseState(decoder: CharsetDecoder, chunker: XmlChunker, rootNeedsToBeSent: Boolean)
   private class CharBufferSeq(buffer: CharBuffer) extends scala.collection.Seq[Char] {
@@ -125,6 +126,7 @@ object XmlChunkSource {
         (xmlChunks, state.copy(chunker=newchunker.consumeAll))
       }
     }
+    override def toString = "CharXmlChunkSource"
   }
   protected case class CXCSState(chunker: XmlChunker, rootNeedsToBeSent: Boolean)
 }

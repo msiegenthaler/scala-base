@@ -44,6 +44,7 @@ trait TransformingSink[A,B,Accumulator] extends Sink[A] with StateServer {
   }
 
   override def close = stopAndWait
+  override def toString = "TransformingSink"
 }
 
 
@@ -62,4 +63,5 @@ trait OneToOneTransformingSink[A,B] extends Sink[A] {
     sink.writeCast(its)
   }
   override def close = sink.close
+  override def toString = sink.toString+"-transformed"
 }

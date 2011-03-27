@@ -51,4 +51,6 @@ trait OutputStreamSink extends Sink[Byte] with StateServer {
   }
 
   override def close = stopAndWait
+
+  override def toString = "OutputStreamSink"
 }

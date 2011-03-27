@@ -88,6 +88,7 @@ object XmlChunkSink {
 
 trait XmlChunkCharSink extends XmlChunkSink[Char] {
   protected override def convertToTargetType(data: Seq[Char]) = data
+  override def toString = "XmlChunkCharSink"
 }
 trait XmlChunkByteSink extends XmlChunkSink[Byte] {
   protected val encoding: Charset
@@ -95,6 +96,7 @@ trait XmlChunkByteSink extends XmlChunkSink[Byte] {
     "<?xml version=\"1.0\" encoding=\""+encoding.toString+"\"?>\n"
   protected override def convertToTargetType(data: Seq[Char]) =
     data.mkString.getBytes(encoding)
+  override def toString = "XmlChunkByteSink"
 }
 trait XmlChunkSink[Target] extends TransformingSink[Elem,Target,Seq[Char]] {
   protected val root: Elem

@@ -75,4 +75,5 @@ trait InputStreamReader extends Reader[Byte] with Spawnable with ConcurrentObjec
     process ! Terminate
     ()
   }
+  override def toString = "InputStreamReader"
 }

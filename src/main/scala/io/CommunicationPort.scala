@@ -62,6 +62,7 @@ object CommunicationPort {
     override def close = {
       StopPort().sendAndSelect(process)
     }
+    override def toString = "CommunicationPort"
   }
   private case class StopPort() extends MessageWithSimpleReply[Unit]
 

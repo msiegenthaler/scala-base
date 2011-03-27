@@ -46,13 +46,13 @@ object Reader {
   type ReaderFun[A] = Read[A] => ReadResult @process
 
   def toSource[A](reader: => Reader[A] @process, as: SpawnStrategy = SpawnAsRequiredChild): Source[A] @process = {
-    val source = new SourceReaderImpl[A] {
+    val source = new ReaderSourceImpl[A] {
       override def openReader = reader
     }
     Spawner.start(source, as)
   }
 
-  trait SourceReaderImpl[A] extends Source[A] with StateServer {
+  trait ReaderSourceImpl[A] extends Source[A] with StateServer {
     protected def openReader: Reader[A] @process
 
     protected object ReadNext
@@ -144,6 +144,7 @@ object Reader {
           noop
       }
     }
+    override def nameOfProcess = "ReaderSource"
   }
 }
 
