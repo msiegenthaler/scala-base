@@ -7,6 +7,9 @@ package process
 sealed trait ProcessEnd {
   def process: Process
 }
+object ProcessEnd {
+  def unapply(end: ProcessEnd) = Some(end.process)
+}
 
 /**
  * Message that signals the normal exit of the process

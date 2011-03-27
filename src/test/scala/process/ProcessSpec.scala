@@ -342,6 +342,75 @@ class ProcessTest extends ProcessSpec with ShouldMatchers {
         }
         s.get(1000) should be(Some("oO"))
       }
+      it_("ProcessExit should match ProcessEnd(process)") {
+        val s = new SyncVar[String]
+        val p = spawn {
+          val c = spawnChild(Monitored) {
+            "i'm not doing anything"
+          }
+          val process = receive {
+            case ProcessEnd(process) => process
+          }
+          if (process==c) s.set("ok")
+          else s.set("fail")
+        }
+        s.get(1000) should be(Some("ok"))        
+      }
+      it_("ProcessExit should match ProcessCrash(process)") {
+        val s = new SyncVar[String]
+        val p = spawn {
+          val c = spawnChild(Monitored) {
+            throw new RuntimeException("oO")
+          }
+          val a = receiveWithin(300 ms) {
+            case ProcessEnd(process) => Some(process)
+            case Timeout => None
+          }
+          a match {
+            case Some(process) if process == c => s.set("ok")
+            case _ => s.set("fail")
+          }
+        }
+        s.get(1000) should be(Some("ok"))
+      }
+      it_("ProcessExit should match ProcessKill(process)") {
+        val s1 = new SyncVar[String]
+        val s2 = new SyncVar[String]
+        val s3 = new SyncVar[String]
+        val s4 = new SyncVar[String]
+        val pp = spawn {
+          val p = spawnChild(Monitored) {
+            val p = self
+            val c = spawnChild(Required) {
+              p ! "Hi"
+              receive {
+                case "Ok, crash" =>
+                  s1.set("ok")
+                  throw new RuntimeException("this is expected")
+                case other => s1.set("Fail "+other) 
+              }
+            }
+            receive {
+              case "Hi" => s2.set("ok")
+              case other => s2.set("Fail "+other)
+            }
+            c ! "Ok, crash"
+            receiveWithin(1 s) {
+              case Timeout => s3.set("nooo")
+            }
+          }
+          receiveWithin(3 s) {
+            case ProcessEnd(process) =>
+              if (process == p) s4.set("ok")
+              else s4.set("wrong "+process)
+            case other => s4.set("Fail "+other)
+          }
+        }
+        s1.get(2000) should be(Some("ok")) 
+        s2.get(2000) should be(Some("ok"))
+        s3.get(2000) should be(None)
+        s4.get(4000) should be(Some("ok"))
+      }
 
       it_("should not send a message to the paret if a NotMonitoredChild exits normally") {
         val s = new SyncVar[String]
