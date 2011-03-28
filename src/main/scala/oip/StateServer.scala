@@ -116,6 +116,6 @@ trait StateServer extends Spawnable with ConcurrentObject with Log with Process 
     def execute(state: State): State @process
   }
 
-  protected override def toString = "StateServer"
+  override def toString = "StateServer"
 }
 
