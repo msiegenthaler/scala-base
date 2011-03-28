@@ -685,8 +685,9 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
 
     @volatile private[this] var name: Option[String] = None
     def changeName(value: Option[String]) = name = value
-    override def toString = "<" + processName + parent.map("," + _.processName).getOrElse("") + ">"
-    override def processName = name.getOrElse("Process") + "-" + pid
+    override def toString = "<" + processName +  ">"
+    override def processName = shortName + parent.map("," + _.processName).getOrElse("")
+    protected def shortName = name.getOrElse("Process") + "-" + pid
 
     val external: Process = this //TODO let gc collect us we don't have a 'internal' reference anymore
   }
