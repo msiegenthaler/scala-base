@@ -13,7 +13,7 @@ trait Spawnable {
   protected[oip] def start(as: SpawnStrategy) = startMutex.synchronized {
     if (_process.isSet) throw new IllegalStateException("already started")
     val p = as.spawn {
-      processName(Some(nameOfProcess))
+      processName(nameOfProcess)
       body
     }
     _process.set(p)

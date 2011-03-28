@@ -370,6 +370,7 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
     def addWatcher(watcher: ProcessInternal)
     def removeWatcher(watcher: ProcessInternal)
     def send(msg: Any)
+    def processName: String
   }
   
   /**
@@ -581,9 +582,9 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
   }
   private final val pidDealer = new java.util.concurrent.atomic.AtomicLong(0)
 
-  private class ProcessImpl(queue_org: ExecutionQueue, listener: ProcessListener, parent: Option[Process])
+  private class ProcessImpl(queue_org: ExecutionQueue, listener: ProcessListener, parent: Option[ProcessInternal])
           extends Process with ProcessInternal {
-    def this(queue: ExecutionQueue, listener: ProcessListener, body: => Any @process, initialWatchers: List[ProcessInternal], initialWatched: List[ProcessInternal], parent: Option[Process]) = {
+    def this(queue: ExecutionQueue, listener: ProcessListener, body: => Any @process, initialWatchers: List[ProcessInternal], initialWatched: List[ProcessInternal], parent: Option[ProcessInternal]) = {
       this(queue, listener, parent)
       val toExecute: ProcessAction[Any] = reset {
         firstFun.cps
@@ -684,13 +685,8 @@ object ProcessCps extends Log with MessageBoxContainer[Any] {
 
     @volatile private[this] var name: Option[String] = None
     def changeName(value: Option[String]) = name = value
-    override def toString = {
-      val n = name match {
-        case Some(name) => "<"+name+"-"+pid+">"
-        case None => "<Process-"+pid+">"
-      }
-      parent.map(n + " # " + _.toString).getOrElse(n)
-    }
+    override def toString = "<" + processName + parent.map("," + _.processName).getOrElse("") + ">"
+    override def processName = name.getOrElse("Process") + "-" + pid
 
     val external: Process = this //TODO let gc collect us we don't have a 'internal' reference anymore
   }

@@ -182,6 +182,7 @@ package object process {
    * This will be used in toString of the process and for logging.
    * Example: Name = "<Process-12>" changes to "<MyListener-12>" after calling processName("MyListener")
    */
+  def processName(name: String): Unit @process = processName(Some(name))
   def processName(name: Option[String]): Unit @process = ProcessCps.processName(name)
   
   /**
