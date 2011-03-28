@@ -144,7 +144,7 @@ object Reader {
           noop
       }
     }
-    override def nameOfProcess = "ReaderSource"
+    override def toString = "ReaderSource"
   }
 }
 

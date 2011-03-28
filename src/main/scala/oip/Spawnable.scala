@@ -23,7 +23,7 @@ trait Spawnable {
 
   protected def body: Unit @process
 
-  protected def nameOfProcess = toString
+  protected def nameOfProcess = Some(toString)
   override def toString = getClass.getSimpleName
 }
 
